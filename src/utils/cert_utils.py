@@ -1,81 +1,121 @@
 """
-Utilidades para manejo de certificados y firma digital
+Utilidades para manejo de certificados y firma digital (usa cryptography para PKCS7)
 """
 import os
-from OpenSSL import crypto
+from typing import Optional, Tuple
 from base64 import b64encode
 
 from src.utils.logger import setup_logger
-
 logger = setup_logger(__name__)
 
-def read_cert_and_key(cert_path, key_path):
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.serialization import pkcs7, load_pem_private_key, load_der_private_key
+
+def _load_cert_any(buf: bytes) -> x509.Certificate:
     """
-    Lee el certificado y la clave privada desde los archivos
+    Intenta cargar un certificado en PEM o DER.
+    """
+    try:
+        return x509.load_pem_x509_certificate(buf)
+    except Exception:
+        return x509.load_der_x509_certificate(buf)
+
+def _load_key_any(buf: bytes, password: Optional[bytes] = None):
+    """
+    Intenta cargar una clave privada en PEM o DER (PKCS#8).
+    """
+    try:
+        return load_pem_private_key(buf, password=password)
+    except Exception:
+        return load_der_private_key(buf, password=password)
+
+def read_cert_and_key(cert_path: str, key_path: str) -> Tuple[bytes, bytes]:
+    """
+    Lee el certificado y la clave privada desde los archivos y devuelve bytes.
     
     Args:
         cert_path (str): Ruta al certificado
         key_path (str): Ruta a la clave privada
         
     Returns:
-        tuple: (cert_content, key_content)
+        tuple: (cert_bytes, key_bytes)
     """
     try:
-        # Verificar que los archivos existen
         if not os.path.exists(cert_path):
             raise FileNotFoundError(f"El certificado no existe en la ruta: {cert_path}")
-        
         if not os.path.exists(key_path):
             raise FileNotFoundError(f"La clave privada no existe en la ruta: {key_path}")
-        
-        # Leer archivos
-        with open(cert_path, 'r') as cert_file:
+
+        with open(cert_path, 'rb') as cert_file:
             cert_content = cert_file.read()
-            
-        with open(key_path, 'r') as key_file:
+        with open(key_path, 'rb') as key_file:
             key_content = key_file.read()
-            
+
         return cert_content, key_content
-    
+
     except Exception as e:
         logger.error(f"Error al leer certificado o clave: {str(e)}")
         raise
 
-def sign_data(data, cert_content, key_content):
+def sign_data(data, cert_content: bytes, key_content: bytes, password: Optional[bytes] = None, detached: bool = True, hash_algo: str = "sha256") -> str:
     """
-    Firma un mensaje usando el certificado y la clave privada
+    Firma un mensaje usando el certificado y la clave privada y devuelve PKCS7 (DER) codificado en base64.
     
     Args:
-        data (str): Datos a firmar
-        cert_content (str): Contenido del certificado
-        key_content (str): Contenido de la clave privada
+        data (str|bytes): Datos a firmar
+        cert_content (bytes): Contenido del certificado (PEM o DER)
+        key_content (bytes): Contenido de la clave privada (PEM o DER)
+        password (Optional[bytes]): Password de la clave si está cifrada
+        detached (bool): True para firma detached (por defecto). Ajustar según el servicio.
         
     Returns:
-        str: Mensaje firmado en formato base64
+        str: PKCS7 (DER) codificado en base64
     """
     try:
-        # Crear objetos de certificado y clave
-        cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_content)
-        key = crypto.load_privatekey(crypto.FILETYPE_PEM, key_content)
+        if isinstance(data, str):
+            data_bytes = data.encode('utf-8')
+        else:
+            data_bytes = data
+
+        cert = _load_cert_any(cert_content)
+        private_key = _load_key_any(key_content, password=password)
+
+        # seleccionar algoritmo de digest
+        algo = hash_algo.lower()
+        if algo == "sha1":
+            digest = hashes.SHA1()
+        elif algo == "sha256":
+            digest = hashes.SHA256()
+        elif algo == "sha384":
+            digest = hashes.SHA384()
+        elif algo == "sha512":
+            digest = hashes.SHA512()
+        else:
+            raise ValueError("hash_algo no soportado")
         
-        # Firmar los datos
-        p7 = crypto.PKCS7()
-        p7.type = crypto.PKCS7_SIGNED
-        p7.set_content(crypto.BIO.MemoryBuffer(data.encode('utf-8')))
-        p7.sign(cert, key, [crypto.PKCS7_NOSIGS])
-        
-        # Convertir a base64
-        out = crypto.BIO.MemoryBuffer()
-        p7.write_pkcs7(out)
-        return b64encode(out.read()).decode('utf-8')
-    
+        builder = pkcs7.PKCS7SignatureBuilder().set_data(data_bytes)
+        builder = builder.add_signer(cert, private_key, digest)
+
+        options = [pkcs7.PKCS7Options.DetachedSignature] if detached else []
+        signed_der = builder.sign(serialization.Encoding.DER, options)
+
+        return b64encode(signed_der).decode('utf-8')
+
     except Exception as e:
         logger.error(f"Error al firmar datos: {str(e)}")
         raise
 
-def generate_testing_cert(output_dir):
+def sign_from_files(cert_path: str, key_path: str, data, password: Optional[bytes] = None, detached: bool = True) -> str:
     """
-    Genera certificados para pruebas
+    Conveniencia: lee cert y key desde disco y firma los datos.
+    """
+    cert_bytes, key_bytes = read_cert_and_key(cert_path, key_path)
+    return sign_data(data, cert_bytes, key_bytes, password=password, detached=detached)
+
+def generate_testing_cert(output_dir: str) -> Tuple[str, str]:
+    """
+    Genera certificados para pruebas usando openssl (requiere openssl en el host/imagen).
     
     Args:
         output_dir (str): Directorio donde se guardarán los certificados
@@ -84,27 +124,21 @@ def generate_testing_cert(output_dir):
         tuple: (cert_path, key_path)
     """
     try:
-        # Crear directorio si no existe
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
-        # Rutas para los archivos
         key_path = os.path.join(output_dir, "clave_privada.key")
         csr_path = os.path.join(output_dir, "pedido.csr")
         cert_path = os.path.join(output_dir, "certificado.crt")
         
-        # Generar clave privada
-        os.system(f"openssl genrsa -out {key_path} 2048")
-        
-        # Generar CSR
-        os.system(f'openssl req -new -key {key_path} -subj "/C=AR/O=MiOrganizacion/CN=MiNombre/serialNumber=CUIT 20123456789" -out {csr_path}')
-        
-        # Auto-firmar certificado
-        os.system(f"openssl x509 -req -days 365 -in {csr_path} -signkey {key_path} -out {cert_path}")
+        # Generar clave privada, CSR y certificado autofirmado
+        os.system(f"openssl genrsa -out \"{key_path}\" 2048")
+        os.system(f'openssl req -new -key "{key_path}" -subj "/C=AR/O=MiOrganizacion/CN=MiNombre/serialNumber=CUIT 20123456789" -out "{csr_path}"')
+        os.system(f"openssl x509 -req -days 365 -in \"{csr_path}\" -signkey \"{key_path}\" -out \"{cert_path}\"")
         
         logger.info(f"Certificados generados exitosamente en {output_dir}")
         return cert_path, key_path
-    
+
     except Exception as e:
         logger.error(f"Error al generar certificados: {str(e)}")
         raise

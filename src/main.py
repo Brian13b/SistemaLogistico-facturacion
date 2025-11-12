@@ -1,8 +1,3 @@
-"""
-Sistema de Facturación Electrónica para AFIP Argentina
-Punto de entrada principal para el sistema
-"""
-
 import argparse
 import sys
 import logging
@@ -12,7 +7,7 @@ from datetime import datetime
 from src.core.client import AfipClient
 from src.services.wsfe import WSFEService
 from src.utils.logger import setup_logger
-from src.config import Config
+from config import Config
 
 
 def parse_arguments():

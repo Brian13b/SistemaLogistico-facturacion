@@ -10,7 +10,7 @@ from zeep.transports import Transport
 from urllib3.exceptions import InsecureRequestWarning
 import requests
 
-from src.config import AFIP_CONFIG, AFIP_URLS, TOKEN_TTL, BASE_DIR
+from src.config import Config
 from src.utils.logger import setup_logger
 from src.utils.cert_utils import read_cert_and_key, sign_data
 from src.utils.xml_utils import create_tra_xml, parse_wsaa_response
@@ -20,6 +20,11 @@ from src.core.models import AfipAuth
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 logger = setup_logger(__name__)
+
+AFIP_CONFIG = Config.AFIP_CONFIG
+AFIP_URLS = Config.AFIP_URLS
+TOKEN_TTL = Config.TOKEN_TTL
+BASE_DIR = Config.BASE_DIR
 
 class AfipAuthenticator:
     """Clase para manejar la autenticación con AFIP"""

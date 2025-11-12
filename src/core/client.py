@@ -5,7 +5,7 @@ from src.services.wsaa import WSAAService
 from src.services.wsfe import WSFEService
 from src.core.models import InvoiceRequest, InvoiceResponse
 from src.utils.logger import setup_logger
-from src.config import DEFAULT_SALES_POINT
+from src.config import Config
 
 logger = setup_logger(__name__)
 
@@ -55,7 +55,7 @@ class AfipClient:
             int: Último número de factura
         """
         if sales_point is None:
-            sales_point = DEFAULT_SALES_POINT
+            sales_point = Config.DEFAULT_SALES_POINT
             
         return self.wsfe.get_last_voucher(sales_point, voucher_type)
     
@@ -162,7 +162,7 @@ class AfipClient:
             
         # Preparar datos de la factura
         invoice_data = {
-            'sales_point': kwargs.get('sales_point', DEFAULT_SALES_POINT),
+            'sales_point': kwargs.get('sales_point', Config.DEFAULT_SALES_POINT),
             'voucher_type': 1,  # Factura A
             'concept': kwargs.get('concept', 1),
             'doc_type': 80,  # CUIT
@@ -213,7 +213,7 @@ class AfipClient:
             
         # Preparar datos de la factura
         invoice_data = {
-            'sales_point': kwargs.get('sales_point', DEFAULT_SALES_POINT),
+            'sales_point': kwargs.get('sales_point', Config.DEFAULT_SALES_POINT),
             'voucher_type': 6,  # Factura B
             'concept': kwargs.get('concept', 1),
             'doc_type': client_doc_type,

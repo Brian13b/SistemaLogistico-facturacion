@@ -1,5 +1,6 @@
 """
-Servicio de Factura Electrónica de AFIP (WSFE)
+Servicio de Factura Electrónica de AFIP (WSFE) - Versión Mejorada
+Cumple con especificación RG 4291
 """
 from datetime import datetime
 from requests import Session
@@ -7,7 +8,7 @@ from zeep import Client
 from zeep.transports import Transport
 import urllib3
 
-from src.config import AFIP_URLS
+from src.config import Config
 from src.services.wsaa import WSAAService
 from src.core.models import InvoiceRequest, InvoiceResponse
 from src.utils.logger import setup_logger
@@ -41,7 +42,11 @@ class WSFEService:
         self.cuit = cuit or self.wsaa_service.authenticator.cuit
         
         # URL del servicio WSFE según el entorno
-        self.wsfe_url = AFIP_URLS["wsfe"]["testing"] if self.testing else AFIP_URLS["wsfe"]["production"]
+        self.wsfe_url = Config.AFIP_URLS["wsfe"]["testing"] if self.testing else Config.AFIP_URLS["wsfe"]["production"]
+        
+        # IMPORTANTE: Forzar modo homologación si testing=True
+        if self.testing:
+            logger.warning("⚠️  MODO HOMOLOGACIÓN ACTIVO - No se emitirán facturas reales")
     
     def _get_client(self):
         """
@@ -66,6 +71,26 @@ class WSFEService:
             dict: Diccionario con Token, Sign y Cuit
         """
         return self.wsaa_service.get_auth_dict("wsfe", force_new)
+    
+    def check_server_status(self):
+        """
+        Verifica el estado del servidor WSFE (FEDummy)
+        
+        Returns:
+            dict: Estado de los servidores
+        """
+        try:
+            client = self._get_client()
+            result = client.service.FEDummy()
+            
+            return {
+                'app_server': result.AppServer,
+                'db_server': result.DbServer,
+                'auth_server': result.AuthServer
+            }
+        except Exception as e:
+            logger.error(f"Error al verificar estado del servidor: {str(e)}")
+            raise
     
     def get_last_voucher(self, sales_point, voucher_type):
         """
@@ -226,6 +251,31 @@ class WSFEService:
             logger.error(f"Error al obtener tipos de moneda: {str(e)}")
             raise
     
+    def get_sales_points(self):
+        """
+        Obtiene los puntos de venta habilitados
+        
+        Returns:
+            list: Lista de puntos de venta
+        """
+        try:
+            client = self._get_client()
+            auth = self._get_auth()
+            
+            logger.debug("Consultando puntos de venta")
+            result = client.service.FEParamGetPtosVenta(Auth=auth)
+            
+            if hasattr(result, 'Errors') and result.Errors:
+                error_msg = format_wsfe_error(result.Errors)
+                logger.error(f"Error al obtener puntos de venta: {error_msg}")
+                raise Exception(f"Error de AFIP: {error_msg}")
+            
+            return result.ResultGet.PtoVenta
+            
+        except Exception as e:
+            logger.error(f"Error al obtener puntos de venta: {str(e)}")
+            raise
+    
     def create_invoice(self, invoice_request):
         """
         Crea una factura electrónica
@@ -237,6 +287,10 @@ class WSFEService:
             InvoiceResponse: Respuesta de la factura autorizada
         """
         try:
+            # Validación de modo homologación
+            if self.testing:
+                logger.info("🔧 Creando factura en MODO HOMOLOGACIÓN")
+            
             client = self._get_client()
             auth = self._get_auth()
             
@@ -249,7 +303,7 @@ class WSFEService:
             # Fecha actual en formato AAAAMMDD
             current_date = datetime.now().strftime("%Y%m%d")
             
-            # Preparar los datos de la factura
+            # Preparar los datos de la factura según la documentación AFIP
             invoice_data = {
                 'Auth': auth,
                 'FeCAEReq': {
@@ -262,16 +316,16 @@ class WSFEService:
                         'FECAEDetRequest': [{
                             'Concepto': invoice_request.concept,
                             'DocTipo': invoice_request.doc_type,
-                            'DocNro': invoice_request.doc_number,
+                            'DocNro': int(invoice_request.doc_number),
                             'CbteDesde': last_voucher + 1,
                             'CbteHasta': last_voucher + 1,
                             'CbteFch': current_date,
-                            'ImpTotal': invoice_request.total_amount,
-                            'ImpTotConc': invoice_request.non_taxable_amount,
-                            'ImpNeto': invoice_request.net_amount,
-                            'ImpOpEx': invoice_request.exempt_amount,
-                            'ImpIVA': invoice_request.vat_amount,
-                            'ImpTrib': invoice_request.tributes_amount,
+                            'ImpTotal': round(invoice_request.total_amount, 2),
+                            'ImpTotConc': round(invoice_request.non_taxable_amount, 2),
+                            'ImpNeto': round(invoice_request.net_amount, 2),
+                            'ImpOpEx': round(invoice_request.exempt_amount, 2),
+                            'ImpIVA': round(invoice_request.vat_amount, 2),
+                            'ImpTrib': round(invoice_request.tributes_amount, 2),
                             'MonId': invoice_request.currency,
                             'MonCotiz': invoice_request.currency_rate,
                         }]
@@ -299,13 +353,13 @@ class WSFEService:
                     invoice_detail['FchVtoPago'] = current_date
             
             # Agregar IVA si existe
-            if invoice_request.vat_details:
+            if invoice_request.vat_details and len(invoice_request.vat_details) > 0:
                 invoice_data['FeCAEReq']['FeDetReq']['FECAEDetRequest'][0]['Iva'] = {
                     'AlicIva': [vat_detail.dict() for vat_detail in invoice_request.vat_details]
                 }
             
             # Agregar tributos si existen
-            if invoice_request.tributes_details:
+            if invoice_request.tributes_details and len(invoice_request.tributes_details) > 0:
                 invoice_data['FeCAEReq']['FeDetReq']['FECAEDetRequest'][0]['Tributos'] = {
                     'Tributo': [trib_detail.dict() for trib_detail in invoice_request.tributes_details]
                 }
@@ -313,12 +367,20 @@ class WSFEService:
             logger.info(f"Solicitando CAE para comprobante {invoice_request.voucher_type}, punto de venta {invoice_request.sales_point}")
             result = client.service.FECAESolicitar(**invoice_data)
             
+            # Verificar errores
             if hasattr(result, 'Errors') and result.Errors:
                 error_msg = format_wsfe_error(result.Errors)
                 logger.error(f"Error al crear factura: {error_msg}")
                 raise Exception(f"Error de AFIP: {error_msg}")
             
             detail_response = result.FeDetResp.FECAEDetResponse[0]
+            
+            # Verificar observaciones
+            observations = None
+            if hasattr(detail_response, 'Observaciones') and detail_response.Observaciones:
+                observations = [obs.Msg for obs in detail_response.Observaciones.Obs]
+                for obs in observations:
+                    logger.warning(f"Observación AFIP: {obs}")
             
             # Crear respuesta
             invoice_response = InvoiceResponse(
@@ -327,11 +389,11 @@ class WSFEService:
                 voucher_number=detail_response.CbteDesde,
                 voucher_date=current_date,
                 status="A" if detail_response.Resultado == "A" else "R",
-                observations=[obs.Msg for obs in detail_response.Observaciones.Obs] if hasattr(detail_response, 'Observaciones') and detail_response.Observaciones else None,
+                observations=observations,
                 errors=None
             )
             
-            logger.info(f"Factura creada con CAE: {invoice_response.cae}, vencimiento: {invoice_response.cae_expiration}")
+            logger.info(f"✅ Factura {'HOMOLOGACIÓN' if self.testing else 'PRODUCCIÓN'} creada con CAE: {invoice_response.cae}, vencimiento: {invoice_response.cae_expiration}")
             return invoice_response
             
         except Exception as e:
