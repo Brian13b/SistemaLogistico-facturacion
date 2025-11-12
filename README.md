@@ -1,6 +1,10 @@
 # 💰 Módulo de facturación electrónica del sistema de gestión de flotas.
 
+<<<<<<< HEAD
 Este repositorio forma parte del Sistema Logistico y se encarga de la gestión de la facturación electrónica. Está integrado con el **web service SOAP** de **AFIP / ARCA Argentina** para emitir comprobantes fiscales válidos, automatizando parte del proceso tributario.
+=======
+Este repositorio forma parte del **Sistema Logistico** y se encarga de la gestión de la facturación electrónica. Está integrado con el **web service SOAP** de **AFIP / ARCA Argentina** para emitir comprobantes fiscales válidos, automatizando parte del proceso tributario.
+>>>>>>> 4bf0f4dee04c90fe04d09742479d41c52865b65d
 
 ---
 
