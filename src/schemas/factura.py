@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, model_validator
 
 class VatDetailSchema(BaseModel):
     id: int = Field(..., description="ID del tipo de IVA")
@@ -70,6 +70,29 @@ class FacturaRequestSchema(BaseModel):
             raise ValueError(f"Total ({v}) no coincide con la suma ({expected})")
         return v
 
+    @model_validator(mode='after')
+    def validate_total_consistency(self) -> 'FacturaRequestSchema':
+        """Valida que el importe total sea la suma exacta de sus componentes."""
+        
+        # Aseguramos que los valores sean Decimal
+        net = self.net_amount or Decimal(0)
+        vat = self.vat_amount or Decimal(0)
+        non_tax = self.non_taxable_amount or Decimal(0)
+        exempt = self.exempt_amount or Decimal(0)
+        tributes = self.tributes_amount or Decimal(0)
+        
+        expected_total = net + vat + non_tax + exempt + tributes
+        
+        # Usamos abs() para permitir una diferencia mínima por redondeo de la DB, 
+        # aunque con Decimal no debería pasar.
+        if abs(self.total_amount - expected_total) > Decimal('0.01'):
+            raise ValueError(
+                f"Total ({self.total_amount}) no coincide con la suma de componentes ({expected_total}). "
+                f"Diferencia: {abs(self.total_amount - expected_total)}"
+            )
+        
+        return self
+    
 class FacturaResponseSchema(BaseModel):
     id: int
     cae: str
