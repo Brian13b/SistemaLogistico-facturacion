@@ -81,3 +81,32 @@ class FacturaResponseSchema(BaseModel):
     
     class Config:
         from_attributes = True
+
+class FacturaListSchema(BaseModel):
+    """Schema simplificado para listar facturas"""
+    id: int
+    tipo_cbte: int
+    punto_vta: int
+    numero: int
+    fecha_cbte: str
+    cae: str
+    imp_total: float
+    nro_doc: str
+    estado: str
+    fecha_creacion: datetime
+    
+    class Config:
+        from_attributes = True
+
+class ParametroAFIPSchema(BaseModel):
+    """Schema para parámetros de AFIP (Monedas, Tipos de Comprobante, etc.)"""
+    tipo: str
+    codigo: str
+    descripcion: Optional[str]
+    datos_adicionales: Optional[Dict[str, Any]] = None
+
+class FacturaConsultaSchema(BaseModel):
+    """Schema para consultar una factura específica en AFIP"""
+    tipo_cbte: int = Field(..., description="Tipo de comprobante (1: A, 6: B, etc)")
+    punto_vta: int = Field(..., description="Punto de venta")
+    numero: int = Field(..., description="Número de comprobante")
