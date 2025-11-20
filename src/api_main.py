@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 from contextlib import asynccontextmanager
-from config import Config
+from src.config import Config
 from src.api.routes import router as facturas_router
 from src.database.database import engine, Base
 from src.database import models 
