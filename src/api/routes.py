@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import json
 from datetime import datetime
+from fastapi.responses import FileResponse
+from src.utils.pdf_generator import FacturaPDF 
 
 from src.database.database import get_db
 from src.database.models import Factura
@@ -413,3 +415,112 @@ async def estado_servidores(
             detail=f"Error al verificar estado: {str(e)}"
         )
 
+@router.get("/parametros/cotizacion/{moneda_id}", response_model=dict)
+async def obtener_cotizacion(
+    moneda_id: str,
+    afip_client: AfipClient = Depends(get_afip_client)
+):
+    """
+    Obtiene la cotización oficial de una moneda (ej: DOL)
+    """
+    try:
+        # Accedemos directamente al servicio WSFE del cliente
+        client = afip_client.wsfe._get_client()
+        auth = afip_client.wsfe._get_auth()
+        
+        result = client.service.FEParamGetCotizacion(Auth=auth, MonId=moneda_id)
+        
+        if hasattr(result, 'Errors') and result.Errors:
+            raise Exception(f"Error AFIP: {result.Errors}")
+            
+        return {
+            "moneda": result.ResultGet.MonId,
+            "importe": result.ResultGet.MonCotiz,
+            "fecha": str(result.ResultGet.FchCotiz)
+        }
+    except Exception as e:
+        logger.error(f"Error al obtener cotización: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/ultimo-comprobante/{punto_venta}/{tipo_cbte}", response_model=dict)
+async def obtener_ultimo_comprobante(
+    punto_venta: int,
+    tipo_cbte: int,
+    afip_client: AfipClient = Depends(get_afip_client)
+):
+    """
+    Consulta el último número autorizado en AFIP para verificar sincronización
+    """
+    try:
+        ultimo = afip_client.get_last_invoice_number(punto_venta, tipo_cbte)
+        return {
+            "punto_venta": punto_venta,
+            "tipo_comprobante": tipo_cbte,
+            "ultimo_numero": ultimo
+        }
+    except Exception as e:
+        logger.error(f"Error consultando último comprobante: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/parametros/condiciones-iva-receptor", response_model=List[ParametroAFIPSchema])
+async def obtener_condiciones_iva_receptor(
+    afip_client: AfipClient = Depends(get_afip_client)
+):
+    """
+    Obtiene las condiciones de IVA del receptor (Nuevo ARCA)
+    """
+    try:
+        # Usamos el método nuevo que agregamos a wsfe.py
+        condiciones = afip_client.wsfe.get_condicion_iva_receptor()
+        
+        return [
+            ParametroAFIPSchema(
+                tipo="condicion_iva_receptor",
+                codigo=str(cond.Id),
+                descripcion=cond.Desc,
+                datos_adicionales={"clase_cmp": cond.Cmp_Clase}
+            )
+            for cond in condiciones.ResultGet.CondicionIvaReceptor
+        ]
+    except Exception as e:
+        logger.error(f"Error obteniendo condiciones IVA: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{factura_id}/pdf")
+async def descargar_pdf(
+    factura_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Genera y descarga el PDF de una factura
+    """
+    try:
+        factura = db.query(Factura).filter(Factura.id == factura_id).first()
+        if not factura:
+            raise HTTPException(status_code=404, detail="Factura no encontrada")
+
+        # Configuración para el generador
+        pdf_config = {
+            'pdf_output_dir': '/tmp', # Usar temporal en Render
+            'razon_social': Config.COMPANY_NAME, # Asegúrate de tener esto en Config
+            'cuit': Config.AFIP_CONFIG['cuit'],
+            'domicilio': Config.COMPANY_ADDRESS
+        }
+        
+        # Generar PDF
+        pdf_gen = FacturaPDF(pdf_config)
+        
+        # Convertir modelo SQLAlchemy a diccionario para el generador
+        factura_dict = {c.name: getattr(factura, c.name) for c in factura.__table__.columns}
+        
+        path = pdf_gen.generar_pdf(factura_dict)
+        
+        return FileResponse(
+            path, 
+            media_type='application/pdf', 
+            filename=f"Factura_{factura.punto_vta}-{factura.numero}.pdf"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error generando PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generando PDF: {str(e)}")
