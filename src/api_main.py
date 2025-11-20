@@ -1,12 +1,9 @@
-"""
-API REST principal para el módulo de facturación
-"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 from contextlib import asynccontextmanager
-
+from config import Config
 from src.api.routes import router as facturas_router
 from src.database.database import engine, Base
 from src.database import models 
@@ -58,6 +55,9 @@ app.include_router(facturas_router)
 async def root():
     """Endpoint raíz"""
     return {
+        "service": "Facturación API",
+        "status": "online",
+        "mode": "TESTING" if config.AFIP_CONFIG["testing"] else "PRODUCTION",
         "message": "API de Facturación Electrónica AFIP",
         "version": "1.0.0",
         "endpoints": {
@@ -91,4 +91,3 @@ if __name__ == "__main__":
         port=8001,  # Puerto diferente al backend principal
         reload=True
     )
-

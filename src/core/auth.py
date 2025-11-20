@@ -3,6 +3,7 @@ Manejo de autenticación con AFIP
 """
 import os
 import pickle
+import ctypes
 from datetime import datetime
 from requests import Session
 from zeep import Client
@@ -137,6 +138,23 @@ class AfipAuthenticator:
             # Leer certificado y clave
             cert_content, key_content = read_cert_and_key(self.cert_path, self.key_path)
             
+            # Forzar la carga de la configuración de OpenSSL que habilita proveedores legacy
+            openssl_conf_path = os.path.join(BASE_DIR, 'src', 'config', 'openssl.cnf')
+            libcrypto_found = False
+            for lib_name in ("libcrypto.so.3", "libcrypto.so.1.1"):
+                try:
+                    libcrypto = ctypes.CDLL(lib_name)
+                    libcrypto.OPENSSL_config(openssl_conf_path.encode('utf-8'))
+                    logger.info(f"Configuración de OpenSSL forzada exitosamente usando '{lib_name}'.")
+                    libcrypto_found = True
+                    break
+                except OSError:
+                    logger.debug(f"No se encontró la librería '{lib_name}'. Intentando con la siguiente.")
+                    continue
+            
+            if not libcrypto_found:
+                logger.warning("ALERTA: No se encontró ninguna librería 'libcrypto' compatible (so.3 o so.1.1). La firma digital podría fallar.")
+            
             # Crear TRA
             tra_xml = create_tra_xml(service, TOKEN_TTL)
             
@@ -144,9 +162,10 @@ class AfipAuthenticator:
             signed_tra = sign_data(tra_xml, cert_content, key_content)
             
             # Crear cliente SOAP para WSAA
+            # Aumentamos el timeout a 30 segundos para evitar errores en redes lentas
             session = Session()
             session.verify = False  # Solo para desarrollo
-            transport = Transport(session=session)
+            transport = Transport(session=session, timeout=30)
             client = Client(wsdl=f"{self.wsaa_url}?WSDL", transport=transport)
             
             # Enviar TRA y obtener respuesta
@@ -171,6 +190,18 @@ class AfipAuthenticator:
             
             return auth
         
+        except requests.exceptions.ConnectTimeout:
+            logger.error("Error de red: Timeout al intentar conectar con el servidor de AFIP (WSAA). Verifica la conectividad de red del contenedor.")
+            raise Exception("Error de red: No se pudo conectar con AFIP (WSAA).")
+        except requests.exceptions.ReadTimeout:
+            logger.error("Error de red: Timeout de lectura esperando respuesta de AFIP (WSAA). El servidor podría estar lento.")
+            raise Exception("Error de red: AFIP (WSAA) no respondió a tiempo.")
         except Exception as e:
-            logger.error(f"Error en autenticación: {str(e)}")
-            raise
+            # Si el error original ya es el nuestro, lo relanzamos. Si no, lo envolvemos.
+            if "Firma inválida" in str(e):
+                 logger.error(f"Error en autenticación: {str(e)}")
+                 raise
+            else:
+                logger.error(f"Error inesperado durante la autenticación: {str(e)}")
+                # Es muy probable que el error "Firma inválida" se origine aquí por un problema subyacente.
+                raise Exception(f"Firma inválida o algoritmo no soportado (posible causa subyacente: {type(e).__name__})")

@@ -1,71 +1,66 @@
-"""
-Modelos de base de datos para facturas
-"""
-from sqlalchemy import Column, Integer, String, Float, DateTime, Date, Text, Boolean, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Numeric
 from datetime import datetime
 from src.database.database import Base
 
-
 class Factura(Base):
-    """Modelo de factura emitida"""
+    """Modelo de factura emitida compatible con ARCA v4.1"""
     __tablename__ = "facturas"
     
     id = Column(Integer, primary_key=True, index=True)
     
     # Datos del comprobante
-    tipo_cbte = Column(Integer, nullable=False, index=True)  # 1: Factura A, 6: Factura B, etc.
+    tipo_cbte = Column(Integer, nullable=False, index=True)
     punto_vta = Column(Integer, nullable=False, index=True)
     numero = Column(Integer, nullable=False, index=True)
-    fecha_cbte = Column(String(8), nullable=False)  # Formato AAAAMMDD
-    concepto = Column(Integer, nullable=False)  # 1: Productos, 2: Servicios, 3: Ambos
+    fecha_cbte = Column(String(8), nullable=False)
+    concepto = Column(Integer, nullable=False)
     
     # Datos del cliente
-    tipo_doc = Column(Integer, nullable=False)  # 80: CUIT, 96: DNI, etc.
+    tipo_doc = Column(Integer, nullable=False)
     nro_doc = Column(String(20), nullable=False, index=True)
+    # Nuevo campo v4.0/4.1 [cite: 41]
+    condicion_iva_receptor_id = Column(Integer, nullable=True) 
     
-    # Importes
-    imp_total = Column(Float, nullable=False)
-    imp_neto = Column(Float, nullable=False)
-    imp_iva = Column(Float, default=0)
-    imp_trib = Column(Float, default=0)
-    imp_op_ex = Column(Float, default=0)
-    imp_tot_conc = Column(Float, default=0)
+    # Importes (Usando Numeric para precisión financiera)
+    imp_total = Column(Numeric(15, 2), nullable=False)
+    imp_neto = Column(Numeric(15, 2), nullable=False)
+    imp_iva = Column(Numeric(15, 2), default=0)
+    imp_trib = Column(Numeric(15, 2), default=0)
+    imp_op_ex = Column(Numeric(15, 2), default=0)
+    imp_tot_conc = Column(Numeric(15, 2), default=0)
     
     # Datos del CAE
     cae = Column(String(14), nullable=False, unique=True, index=True)
-    fecha_vto_cae = Column(String(8), nullable=False)  # Formato AAAAMMDD
+    fecha_vto_cae = Column(String(8), nullable=False)
     
     # Estado
-    estado = Column(String(1), default="A")  # A: Aprobado, R: Rechazado
+    estado = Column(String(1), default="A")
     observaciones = Column(Text, nullable=True)
     
-    # Referencia a viaje (opcional) - sin FK porque la BD de facturación es independiente
+    # Referencias
     viaje_id = Column(Integer, nullable=True, index=True)
     
     # Trazabilidad
     fecha_creacion = Column(DateTime, default=datetime.now, nullable=False)
     fecha_actualizacion = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     
-    # Datos adicionales almacenados como JSON
-    detalles_iva = Column(Text, nullable=True)  # JSON con detalles de IVA
-    detalles_tributos = Column(Text, nullable=True)  # JSON con detalles de tributos
+    # Datos adicionales
+    detalles_iva = Column(Text, nullable=True)
+    detalles_tributos = Column(Text, nullable=True)
     moneda = Column(String(3), default="PES")
-    moneda_cotiz = Column(Float, default=1.0)
+    moneda_cotiz = Column(Numeric(10, 6), default=1.0)
+    # Nuevo campo v4.0 [cite: 41]
+    can_mis_mon_ext = Column(String(1), default="N") 
     
-    # PDF generado
     pdf_generado = Column(Boolean, default=False)
     pdf_path = Column(String(500), nullable=True)
 
-
 class ParametroAFIP(Base):
-    """Modelo para cachear parámetros de AFIP"""
     __tablename__ = "parametros_afip"
-    
     id = Column(Integer, primary_key=True, index=True)
-    tipo = Column(String(50), nullable=False, index=True)  # tipos_comprobante, puntos_venta, etc.
+    tipo = Column(String(50), nullable=False, index=True)
     codigo = Column(String(50), nullable=False, index=True)
     descripcion = Column(String(255), nullable=True)
-    datos_adicionales = Column(Text, nullable=True)  # JSON con datos adicionales
+    datos_adicionales = Column(Text, nullable=True)
     fecha_actualizacion = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 

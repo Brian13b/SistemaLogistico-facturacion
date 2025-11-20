@@ -1,108 +1,45 @@
-"""
-Utilidades para manejo de XML
-"""
 import datetime
-from src.utils.logger import setup_logger
-
-logger = setup_logger(__name__)
+import pytz # Recomendado agregar pytz a requirements.txt para seguridad horaria
 
 def create_tra_xml(service, ttl=2400):
-    """
-    Crea un XML para el Ticket de Requerimiento de Acceso (TRA)
+    """Genera el XML para solicitar Ticket de Acceso"""
+    # AFIP usa hora Buenos Aires o UTC. Usamos Buenos Aires para seguridad.
+    tz = pytz.timezone('America/Argentina/Buenos_Aires')
+    now = datetime.datetime.now(tz)
+    expiration = now + datetime.timedelta(seconds=ttl)
     
-    Args:
-        service (str): Servicio a acceder (wsfe, padron, etc)
-        ttl (int): Tiempo de vida del ticket en segundos
-        
-    Returns:
-        str: XML del TRA
-    """
-    try:
-        # Crear fechas
-        now = datetime.datetime.now()
-        expiration = now + datetime.timedelta(seconds=ttl)
-        
-        # Crear XML
-        tra_xml = f"""<?xml version="1.0" encoding="UTF-8" ?>
-        <loginTicketRequest version="1.0">
-            <header>
-                <uniqueId>{str(int(datetime.datetime.timestamp(now)))}</uniqueId>
-                <generationTime>{now.strftime("%Y-%m-%dT%H:%M:%S")}</generationTime>
-                <expirationTime>{expiration.strftime("%Y-%m-%dT%H:%M:%S")}</expirationTime>
-            </header>
-            <service>{service}</service>
-        </loginTicketRequest>"""
-        
-        return tra_xml
+    # Formato estricto de AFIP: YYYY-MM-DDThh:mm:ss
+    generation_time = now.strftime("%Y-%m-%dT%H:%M:%S")
+    expiration_time = expiration.strftime("%Y-%m-%dT%H:%M:%S")
+    unique_id = str(int(now.timestamp()))
     
-    except Exception as e:
-        logger.error(f"Error al crear XML TRA: {str(e)}")
-        raise
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+    <loginTicketRequest version="1.0">
+        <header>
+            <uniqueId>{unique_id}</uniqueId>
+            <generationTime>{generation_time}</generationTime>
+            <expirationTime>{expiration_time}</expirationTime>
+        </header>
+        <service>{service}</service>
+    </loginTicketRequest>"""
+    return xml.strip()
 
-def parse_wsaa_response(wsaa_response):
-    """
-    Parsea la respuesta del servicio WSAA
-    
-    Args:
-        wsaa_response: Respuesta del servicio WSAA
-        
-    Returns:
-        dict: Información extraída (token, sign, expiration)
-    """
-    try:
-        # Extraer datos de la respuesta
-        token = wsaa_response.credentials.token
-        sign = wsaa_response.credentials.sign
-        
-        # Parsear fecha de expiración
-        expiration_str = wsaa_response.header.expirationTime
-        
-        # Manejar diferentes formatos de fecha
-        if '.' in expiration_str and '+' in expiration_str:
-            expiration = datetime.datetime.strptime(
-                expiration_str, 
-                "%Y-%m-%dT%H:%M:%S.%f%z"
-            ).replace(tzinfo=None)
-        elif '.' in expiration_str:
-            expiration = datetime.datetime.strptime(
-                expiration_str, 
-                "%Y-%m-%dT%H:%M:%S.%f"
-            )
-        else:
-            expiration = datetime.datetime.strptime(
-                expiration_str, 
-                "%Y-%m-%dT%H:%M:%S"
-            )
-        
-        return {
-            'token': token,
-            'sign': sign,
-            'expiration': expiration
-        }
-    
-    except Exception as e:
-        logger.error(f"Error al parsear respuesta WSAA: {str(e)}")
-        raise
+def parse_wsaa_response(response):
+    """Extrae token y sign de la respuesta SOAP"""
+    return {
+        "token": response.credentials.token,
+        "sign": response.credentials.sign,
+        "expiration": response.header.expirationTime
+    }
 
-def format_wsfe_error(wsfe_errors):
-    """
-    Formatea los errores devueltos por el servicio WSFE
+def format_wsfe_error(errors):
+    """Formatea lista de errores de Zeep"""
+    if not errors: return "Error desconocido"
+    msgs = []
+    # Zeep devuelve una lista de objetos Err
+    error_list = errors.Err if hasattr(errors, 'Err') else []
+    if not isinstance(error_list, list): error_list = [error_list]
     
-    Args:
-        wsfe_errors: Objeto de errores de WSFE
-        
-    Returns:
-        str: Mensaje de error formateado
-    """
-    try:
-        if not wsfe_errors:
-            return "Error desconocido"
-        
-        if hasattr(wsfe_errors, 'Err'):
-            return f"Error {wsfe_errors.Err.Code}: {wsfe_errors.Err.Msg}"
-        
-        return str(wsfe_errors)
-    
-    except Exception as e:
-        logger.error(f"Error al formatear errores WSFE: {str(e)}")
-        return "Error al procesar la respuesta de AFIP"
+    for e in error_list:
+        msgs.append(f"[{e.Code}] {e.Msg}")
+    return "; ".join(msgs)

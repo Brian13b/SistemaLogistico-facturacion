@@ -1,6 +1,6 @@
 """
-Servicio de Factura Electrónica de AFIP (WSFE) - Versión Mejorada
-Cumple con especificación RG 4291
+Servicio de Factura Electrónica de AFIP (WSFE) - Versión Corregida
+Cumple con especificación RG 4291 y ARCA v4.1
 """
 from datetime import datetime
 from requests import Session
@@ -23,15 +23,6 @@ class WSFEService:
     """Clase para interactuar con el servicio WSFE de AFIP"""
     
     def __init__(self, cuit=None, cert_path=None, key_path=None, testing=None):
-        """
-        Inicializa el servicio WSFE
-        
-        Args:
-            cuit (str): CUIT del contribuyente
-            cert_path (str): Ruta al certificado
-            key_path (str): Ruta a la clave privada
-            testing (bool): Si es True, usa el entorno de homologación
-        """
         self.wsaa_service = WSAAService(
             cuit=cuit,
             cert_path=cert_path,
@@ -44,45 +35,22 @@ class WSFEService:
         # URL del servicio WSFE según el entorno
         self.wsfe_url = Config.AFIP_URLS["wsfe"]["testing"] if self.testing else Config.AFIP_URLS["wsfe"]["production"]
         
-        # IMPORTANTE: Forzar modo homologación si testing=True
         if self.testing:
             logger.warning("⚠️  MODO HOMOLOGACIÓN ACTIVO - No se emitirán facturas reales")
     
     def _get_client(self):
-        """
-        Obtiene un cliente para el servicio WSFE
-        
-        Returns:
-            Client: Cliente SOAP para WSFE
-        """
         session = Session()
         session.verify = False  # Solo para desarrollo
         transport = Transport(session=session)
         return Client(wsdl=f"{self.wsfe_url}?WSDL", transport=transport)
     
     def _get_auth(self, force_new=False):
-        """
-        Obtiene un diccionario con los datos de autenticación para WSFE
-        
-        Args:
-            force_new (bool): Si es True, ignora la caché y genera un nuevo token
-            
-        Returns:
-            dict: Diccionario con Token, Sign y Cuit
-        """
         return self.wsaa_service.get_auth_dict("wsfe", force_new)
     
     def check_server_status(self):
-        """
-        Verifica el estado del servidor WSFE (FEDummy)
-        
-        Returns:
-            dict: Estado de los servidores
-        """
         try:
             client = self._get_client()
             result = client.service.FEDummy()
-            
             return {
                 'app_server': result.AppServer,
                 'db_server': result.DbServer,
@@ -93,16 +61,6 @@ class WSFEService:
             raise
     
     def get_last_voucher(self, sales_point, voucher_type):
-        """
-        Obtiene el último número de comprobante
-        
-        Args:
-            sales_point (int): Punto de venta
-            voucher_type (int): Tipo de comprobante
-            
-        Returns:
-            int: Último número de comprobante
-        """
         try:
             client = self._get_client()
             auth = self._get_auth()
@@ -125,186 +83,114 @@ class WSFEService:
         except Exception as e:
             logger.error(f"Error al obtener último comprobante: {str(e)}")
             raise
-    
+            
     def get_invoice_types(self):
-        """
-        Obtiene los tipos de comprobante disponibles
-        
-        Returns:
-            list: Lista de tipos de comprobante
-        """
-        try:
-            client = self._get_client()
-            auth = self._get_auth()
-            
-            logger.debug("Consultando tipos de comprobante")
-            result = client.service.FEParamGetTiposCbte(Auth=auth)
-            
-            if hasattr(result, 'Errors') and result.Errors:
-                error_msg = format_wsfe_error(result.Errors)
-                logger.error(f"Error al obtener tipos de comprobante: {error_msg}")
-                raise Exception(f"Error de AFIP: {error_msg}")
-            
-            return result.ResultGet.CbteTipo
-            
-        except Exception as e:
-            logger.error(f"Error al obtener tipos de comprobante: {str(e)}")
-            raise
-    
+        return self._get_param_data('FEParamGetTiposCbte', 'CbteTipo')
+
     def get_concept_types(self):
-        """
-        Obtiene los tipos de concepto disponibles
-        
-        Returns:
-            list: Lista de tipos de concepto
-        """
-        try:
-            client = self._get_client()
-            auth = self._get_auth()
-            
-            logger.debug("Consultando tipos de concepto")
-            result = client.service.FEParamGetTiposConcepto(Auth=auth)
-            
-            if hasattr(result, 'Errors') and result.Errors:
-                error_msg = format_wsfe_error(result.Errors)
-                logger.error(f"Error al obtener tipos de concepto: {error_msg}")
-                raise Exception(f"Error de AFIP: {error_msg}")
-            
-            return result.ResultGet.ConceptoTipo
-            
-        except Exception as e:
-            logger.error(f"Error al obtener tipos de concepto: {str(e)}")
-            raise
-    
+        return self._get_param_data('FEParamGetTiposConcepto', 'ConceptoTipo')
+
     def get_document_types(self):
-        """
-        Obtiene los tipos de documento disponibles
-        
-        Returns:
-            list: Lista de tipos de documento
-        """
-        try:
-            client = self._get_client()
-            auth = self._get_auth()
-            
-            logger.debug("Consultando tipos de documento")
-            result = client.service.FEParamGetTiposDoc(Auth=auth)
-            
-            if hasattr(result, 'Errors') and result.Errors:
-                error_msg = format_wsfe_error(result.Errors)
-                logger.error(f"Error al obtener tipos de documento: {error_msg}")
-                raise Exception(f"Error de AFIP: {error_msg}")
-            
-            return result.ResultGet.DocTipo
-            
-        except Exception as e:
-            logger.error(f"Error al obtener tipos de documento: {str(e)}")
-            raise
-    
+        return self._get_param_data('FEParamGetTiposDoc', 'DocTipo')
+
     def get_vat_types(self):
-        """
-        Obtiene los tipos de IVA disponibles
-        
-        Returns:
-            list: Lista de tipos de IVA
-        """
-        try:
-            client = self._get_client()
-            auth = self._get_auth()
-            
-            logger.debug("Consultando tipos de IVA")
-            result = client.service.FEParamGetTiposIva(Auth=auth)
-            
-            if hasattr(result, 'Errors') and result.Errors:
-                error_msg = format_wsfe_error(result.Errors)
-                logger.error(f"Error al obtener tipos de IVA: {error_msg}")
-                raise Exception(f"Error de AFIP: {error_msg}")
-            
-            return result.ResultGet.IvaTipo
-            
-        except Exception as e:
-            logger.error(f"Error al obtener tipos de IVA: {str(e)}")
-            raise
-    
+        return self._get_param_data('FEParamGetTiposIva', 'IvaTipo')
+
     def get_currency_types(self):
-        """
-        Obtiene los tipos de moneda disponibles
-        
-        Returns:
-            list: Lista de tipos de moneda
-        """
-        try:
-            client = self._get_client()
-            auth = self._get_auth()
-            
-            logger.debug("Consultando tipos de moneda")
-            result = client.service.FEParamGetTiposMonedas(Auth=auth)
-            
-            if hasattr(result, 'Errors') and result.Errors:
-                error_msg = format_wsfe_error(result.Errors)
-                logger.error(f"Error al obtener tipos de moneda: {error_msg}")
-                raise Exception(f"Error de AFIP: {error_msg}")
-            
-            return result.ResultGet.Moneda
-            
-        except Exception as e:
-            logger.error(f"Error al obtener tipos de moneda: {str(e)}")
-            raise
-    
+        return self._get_param_data('FEParamGetTiposMonedas', 'Moneda')
+
     def get_sales_points(self):
-        """
-        Obtiene los puntos de venta habilitados
+        return self._get_param_data('FEParamGetPtosVenta', 'PtoVenta')
         
-        Returns:
-            list: Lista de puntos de venta
-        """
+    def _get_param_data(self, method_name, result_key):
+        """Método genérico para obtener parámetros"""
         try:
             client = self._get_client()
             auth = self._get_auth()
-            
-            logger.debug("Consultando puntos de venta")
-            result = client.service.FEParamGetPtosVenta(Auth=auth)
+            method = getattr(client.service, method_name)
+            result = method(Auth=auth)
             
             if hasattr(result, 'Errors') and result.Errors:
                 error_msg = format_wsfe_error(result.Errors)
-                logger.error(f"Error al obtener puntos de venta: {error_msg}")
                 raise Exception(f"Error de AFIP: {error_msg}")
             
-            return result.ResultGet.PtoVenta
-            
+            return getattr(result.ResultGet, result_key)
         except Exception as e:
-            logger.error(f"Error al obtener puntos de venta: {str(e)}")
+            logger.error(f"Error en {method_name}: {str(e)}")
             raise
-    
+
     def create_invoice(self, invoice_request):
         """
-        Crea una factura electrónica
-        
-        Args:
-            invoice_request (InvoiceRequest): Datos de la factura
-            
-        Returns:
-            InvoiceResponse: Respuesta de la factura autorizada
+        Crea una factura electrónica adaptada a ARCA v4.1
         """
         try:
-            # Validación de modo homologación
-            if self.testing:
-                logger.info("🔧 Creando factura en MODO HOMOLOGACIÓN")
-            
             client = self._get_client()
             auth = self._get_auth()
             
-            # Obtener el último número de comprobante
-            last_voucher = self.get_last_voucher(
-                invoice_request.sales_point,
-                invoice_request.voucher_type
-            )
-            
-            # Fecha actual en formato AAAAMMDD
+            # Obtener último número
+            last_voucher = self.get_last_voucher(invoice_request.sales_point, invoice_request.voucher_type)
             current_date = datetime.now().strftime("%Y%m%d")
             
-            # Preparar los datos de la factura según la documentación AFIP
-            invoice_data = {
+            # Estructura del detalle del comprobante
+            # Nota: Convertimos Decimal a float porque Zeep (SOAP) maneja mejor los floats nativos de Python
+            detalle = {
+                'Concepto': invoice_request.concept,
+                'DocTipo': invoice_request.doc_type,
+                'DocNro': int(invoice_request.doc_number),
+                'CbteDesde': last_voucher + 1,
+                'CbteHasta': last_voucher + 1,
+                'CbteFch': current_date,
+                'ImpTotal': float(invoice_request.total_amount),
+                'ImpTotConc': float(invoice_request.non_taxable_amount),
+                'ImpNeto': float(invoice_request.net_amount),
+                'ImpOpEx': float(invoice_request.exempt_amount),
+                'ImpIVA': float(invoice_request.vat_amount),
+                'ImpTrib': float(invoice_request.tributes_amount),
+                'MonId': invoice_request.currency,
+                'MonCotiz': float(invoice_request.currency_rate),
+                
+                # Nuevos campos ARCA v4.0/4.1 
+                'CanMisMonExt': invoice_request.can_mis_mon_ext
+            }
+
+            # Campo CondicionIVAReceptorId (Obligatorio a futuro) [cite: 44]
+            if invoice_request.condicion_iva_receptor_id:
+                detalle['CondicionIVAReceptorId'] = invoice_request.condicion_iva_receptor_id
+
+            # Manejo de Fechas de Servicio (si corresponde)
+            if invoice_request.concept in (2, 3):
+                detalle['FchServDesde'] = invoice_request.service_start_date or current_date
+                detalle['FchServHasta'] = invoice_request.service_end_date or current_date
+                detalle['FchVtoPago'] = invoice_request.payment_due_date or current_date
+
+            # Arrays de IVA
+            if invoice_request.vat_details:
+                detalle['Iva'] = {
+                    'AlicIva': [
+                        {
+                            'Id': v.id,
+                            'BaseImp': float(v.base_imp),
+                            'Importe': float(v.importe)
+                        } for v in invoice_request.vat_details
+                    ]
+                }
+            
+            # Arrays de Tributos
+            if invoice_request.tributes_details:
+                detalle['Tributos'] = {
+                    'Tributo': [
+                        {
+                            'Id': t.id,
+                            'Desc': t.desc,
+                            'BaseImp': float(t.base_imp),
+                            'Alic': float(t.alic),
+                            'Importe': float(t.importe)
+                        } for t in invoice_request.tributes_details
+                    ]
+                }
+
+            # Armado del Request Completo
+            invoice_data_soap = {
                 'Auth': auth,
                 'FeCAEReq': {
                     'FeCabReq': {
@@ -313,105 +199,54 @@ class WSFEService:
                         'CbteTipo': invoice_request.voucher_type
                     },
                     'FeDetReq': {
-                        'FECAEDetRequest': [{
-                            'Concepto': invoice_request.concept,
-                            'DocTipo': invoice_request.doc_type,
-                            'DocNro': int(invoice_request.doc_number),
-                            'CbteDesde': last_voucher + 1,
-                            'CbteHasta': last_voucher + 1,
-                            'CbteFch': current_date,
-                            'ImpTotal': round(invoice_request.total_amount, 2),
-                            'ImpTotConc': round(invoice_request.non_taxable_amount, 2),
-                            'ImpNeto': round(invoice_request.net_amount, 2),
-                            'ImpOpEx': round(invoice_request.exempt_amount, 2),
-                            'ImpIVA': round(invoice_request.vat_amount, 2),
-                            'ImpTrib': round(invoice_request.tributes_amount, 2),
-                            'MonId': invoice_request.currency,
-                            'MonCotiz': invoice_request.currency_rate,
-                        }]
+                        'FECAEDetRequest': [detalle]
                     }
                 }
             }
             
-            # Agregar fechas para servicios si es necesario
-            if invoice_request.concept in (2, 3):  # 2: Servicios, 3: Productos y Servicios
-                invoice_detail = invoice_data['FeCAEReq']['FeDetReq']['FECAEDetRequest'][0]
-                
-                if invoice_request.service_start_date:
-                    invoice_detail['FchServDesde'] = invoice_request.service_start_date
-                else:
-                    invoice_detail['FchServDesde'] = current_date
-                    
-                if invoice_request.service_end_date:
-                    invoice_detail['FchServHasta'] = invoice_request.service_end_date
-                else:
-                    invoice_detail['FchServHasta'] = current_date
-                    
-                if invoice_request.payment_due_date:
-                    invoice_detail['FchVtoPago'] = invoice_request.payment_due_date
-                else:
-                    invoice_detail['FchVtoPago'] = current_date
+            logger.info(f"Solicitando CAE para comprobante {invoice_request.voucher_type}, PV {invoice_request.sales_point}")
+            result = client.service.FECAESolicitar(**invoice_data_soap)
             
-            # Agregar IVA si existe
-            if invoice_request.vat_details and len(invoice_request.vat_details) > 0:
-                invoice_data['FeCAEReq']['FeDetReq']['FECAEDetRequest'][0]['Iva'] = {
-                    'AlicIva': [vat_detail.dict() for vat_detail in invoice_request.vat_details]
-                }
-            
-            # Agregar tributos si existen
-            if invoice_request.tributes_details and len(invoice_request.tributes_details) > 0:
-                invoice_data['FeCAEReq']['FeDetReq']['FECAEDetRequest'][0]['Tributos'] = {
-                    'Tributo': [trib_detail.dict() for trib_detail in invoice_request.tributes_details]
-                }
-            
-            logger.info(f"Solicitando CAE para comprobante {invoice_request.voucher_type}, punto de venta {invoice_request.sales_point}")
-            result = client.service.FECAESolicitar(**invoice_data)
-            
-            # Verificar errores
+            # Verificar errores generales (Nivel Cabecera)
             if hasattr(result, 'Errors') and result.Errors:
                 error_msg = format_wsfe_error(result.Errors)
                 logger.error(f"Error al crear factura: {error_msg}")
                 raise Exception(f"Error de AFIP: {error_msg}")
             
+            # Verificar respuesta del detalle
             detail_response = result.FeDetResp.FECAEDetResponse[0]
             
-            # Verificar observaciones
+            # Verificar observaciones (Warnings)
             observations = None
             if hasattr(detail_response, 'Observaciones') and detail_response.Observaciones:
-                observations = [obs.Msg for obs in detail_response.Observaciones.Obs]
+                observations = [f"Code {obs.Code}: {obs.Msg}" for obs in detail_response.Observaciones.Obs]
                 for obs in observations:
                     logger.warning(f"Observación AFIP: {obs}")
             
-            # Crear respuesta
+            # Verificar si fue RECHAZADO a nivel detalle
+            if detail_response.Resultado == 'R':
+                error_msg = f"Comprobante Rechazado. {observations}"
+                raise Exception(error_msg)
+
+            # Crear respuesta exitosa
             invoice_response = InvoiceResponse(
                 cae=detail_response.CAE,
                 cae_expiration=detail_response.CAEFchVto,
                 voucher_number=detail_response.CbteDesde,
                 voucher_date=current_date,
-                status="A" if detail_response.Resultado == "A" else "R",
+                status="A",
                 observations=observations,
                 errors=None
             )
             
-            logger.info(f"✅ Factura {'HOMOLOGACIÓN' if self.testing else 'PRODUCCIÓN'} creada con CAE: {invoice_response.cae}, vencimiento: {invoice_response.cae_expiration}")
+            logger.info(f"✅ Factura creada con CAE: {invoice_response.cae}")
             return invoice_response
             
         except Exception as e:
-            logger.error(f"Error al crear factura: {str(e)}")
+            logger.error(f"Error en create_invoice: {str(e)}")
             raise
-    
+
     def check_invoice(self, sales_point, voucher_type, voucher_number):
-        """
-        Consulta una factura existente
-        
-        Args:
-            sales_point (int): Punto de venta
-            voucher_type (int): Tipo de comprobante
-            voucher_number (int): Número de comprobante
-            
-        Returns:
-            dict: Datos de la factura
-        """
         try:
             client = self._get_client()
             auth = self._get_auth()
@@ -428,11 +263,24 @@ class WSFEService:
             
             if hasattr(result, 'Errors') and result.Errors:
                 error_msg = format_wsfe_error(result.Errors)
-                logger.error(f"Error al consultar factura: {error_msg}")
                 raise Exception(f"Error de AFIP: {error_msg}")
             
             return result.ResultGet
             
         except Exception as e:
             logger.error(f"Error al consultar factura: {str(e)}")
+            raise
+
+    def get_condicion_iva_receptor(self):
+        """
+        Nuevo método v4.0: Recuperar condiciones de IVA receptor
+        Documentado en [cite: 1578]
+        """
+        try:
+            client = self._get_client()
+            auth = self._get_auth()
+            # El parámetro ClaseCmp es opcional, si no se envía devuelve todos
+            return client.service.FEParamGetCondicionIvaReceptor(Auth=auth)
+        except Exception as e:
+            logger.error(f"Error obteniendo condiciones IVA: {e}")
             raise

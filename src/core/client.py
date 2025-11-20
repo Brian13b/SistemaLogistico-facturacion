@@ -149,16 +149,20 @@ class AfipClient:
         Returns:
             InvoiceResponse: Respuesta de la factura autorizada
         """
+        # Mapeo de tasas de IVA a sus IDs correspondientes en AFIP
+        VAT_RATE_TO_ID = {
+            21: 5,
+            10.5: 4,
+            27: 6,
+            # Agrega otras tasas si es necesario
+        }
         # Calcular importes
         vat_amount = net_amount * (vat_rate / 100)
         total_amount = net_amount + vat_amount
         
-        # Obtener ID del tipo de IVA
-        vat_type_id = 5  # Por defecto 21%
-        if vat_rate == 10.5:
-            vat_type_id = 4
-        elif vat_rate == 27:
-            vat_type_id = 6
+        vat_type_id = VAT_RATE_TO_ID.get(vat_rate)
+        if vat_type_id is None:
+            raise ValueError(f"Tasa de IVA no soportada: {vat_rate}")
             
         # Preparar datos de la factura
         invoice_data = {
@@ -200,16 +204,20 @@ class AfipClient:
         Returns:
             InvoiceResponse: Respuesta de la factura autorizada
         """
+        # Mapeo de tasas de IVA a sus IDs correspondientes en AFIP
+        VAT_RATE_TO_ID = {
+            21: 5,
+            10.5: 4,
+            27: 6,
+            # Agrega otras tasas si es necesario
+        }
         # Calcular importes
         net_amount = total_amount / (1 + (vat_rate / 100))
         vat_amount = total_amount - net_amount
         
-        # Obtener ID del tipo de IVA
-        vat_type_id = 5  # Por defecto 21%
-        if vat_rate == 10.5:
-            vat_type_id = 4
-        elif vat_rate == 27:
-            vat_type_id = 6
+        vat_type_id = VAT_RATE_TO_ID.get(vat_rate)
+        if vat_type_id is None:
+            raise ValueError(f"Tasa de IVA no soportada: {vat_rate}")
             
         # Preparar datos de la factura
         invoice_data = {
