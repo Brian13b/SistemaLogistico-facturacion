@@ -55,21 +55,6 @@ class FacturaRequestSchema(BaseModel):
         if isinstance(v, datetime): return v.strftime("%Y%m%d")
         return v.replace("-", "").replace("/", "")
 
-    @validator('total_amount')
-    def validate_total(cls, v, values):
-        # Validación financiera estricta
-        components = [
-            values.get('net_amount', 0),
-            values.get('vat_amount', 0),
-            values.get('non_taxable_amount', 0),
-            values.get('exempt_amount', 0),
-            values.get('tributes_amount', 0)
-        ]
-        expected = sum(components)
-        if abs(v - expected) > Decimal('0.01'):
-            raise ValueError(f"Total ({v}) no coincide con la suma ({expected})")
-        return v
-
     @model_validator(mode='after')
     def validate_total_consistency(self) -> 'FacturaRequestSchema':
         """Valida que el importe total sea la suma exacta de sus componentes."""
