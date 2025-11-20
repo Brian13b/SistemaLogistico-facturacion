@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
     gcc \
+    libssl-dev \
     libxml2-dev \
     libxslt1-dev \
     --no-install-recommends && \
