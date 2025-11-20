@@ -57,7 +57,7 @@ async def root():
     return {
         "service": "Facturación API",
         "status": "online",
-        "mode": "TESTING" if config.AFIP_CONFIG["testing"] else "PRODUCTION",
+        "mode": "TESTING" if Config.AFIP_CONFIG["testing"] else "PRODUCTION",
         "message": "API de Facturación Electrónica AFIP",
         "version": "1.0.0",
         "endpoints": {
