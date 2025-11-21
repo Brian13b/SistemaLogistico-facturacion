@@ -1,23 +1,40 @@
 """
-Utilidades para manejo de XML con soporte UTC y Parsing robusto
+Utilidades para manejo de XML con ajuste temporal para AFIP
 """
-from datetime import datetime, timedelta, timezone
-import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
+import zoneinfo # Estándar en Python 3.9+
 from src.utils.logger import setup_logger
+import xml.etree.ElementTree as ET
 
 logger = setup_logger(__name__)
 
 def create_tra_xml(service, ttl=2400):
     """
     Genera el XML para solicitar Ticket de Acceso (TRA).
-    Usa UTC para evitar error de 'Firma inválida'.
+    Aplica un retraso de 10 minutos para evitar error 'generationTime in the future'.
     """
     try:
-        now = datetime.now(timezone.utc)
+        # 1. Obtener hora Argentina
+        try:
+            tz_arg = zoneinfo.ZoneInfo("America/Argentina/Buenos_Aires")
+            now_real = datetime.now(tz_arg)
+        except Exception:
+            # Fallback manual a UTC-3 si no encuentra la zona
+            timezone_offset = -3.0 
+            tzinfo = datetime.timezone(datetime.timedelta(hours=timezone_offset))
+            now_real = datetime.now(tzinfo)
+
+        # 2. EL FIX MÁGICO: Restar 10 minutos
+        # Esto garantiza que AFIP nunca vea el ticket como "del futuro" 
+        # por diferencias de reloj entre servidores.
+        now = now_real - timedelta(minutes=10)
         expiration = now + timedelta(seconds=ttl)
         
+        # Formato requerido por AFIP
         generation_time = now.strftime("%Y-%m-%dT%H:%M:%S")
         expiration_time = expiration.strftime("%Y-%m-%dT%H:%M:%S")
+        
+        # ID único
         unique_id = str(int(now.timestamp()))
         
         xml = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -46,14 +63,17 @@ def parse_wsaa_response(response):
         sign = None
         expiration_str = None
 
-        # CASO 1: La respuesta es un String XML (Lo que te está pasando ahora)
+        # CASO 1: La respuesta es un String XML
         if isinstance(response, str):
-            # Parseamos el XML
             root = ET.fromstring(response)
-            # Buscamos los tags (usamos .// para buscar en cualquier nivel)
-            token = root.find(".//token").text
-            sign = root.find(".//sign").text
-            expiration_str = root.find(".//expirationTime").text
+            # Buscamos los tags recursivamente
+            token_node = root.find(".//token")
+            sign_node = root.find(".//sign")
+            time_node = root.find(".//expirationTime")
+            
+            if token_node is not None: token = token_node.text
+            if sign_node is not None: sign = sign_node.text
+            if time_node is not None: expiration_str = time_node.text
 
         # CASO 2: La respuesta es un Objeto Zeep
         elif hasattr(response, 'credentials'):
@@ -63,20 +83,22 @@ def parse_wsaa_response(response):
             
         # CASO 3: La respuesta es un Diccionario
         elif isinstance(response, dict):
-            token = response['credentials']['token']
-            sign = response['credentials']['sign']
-            expiration_str = response['header']['expirationTime']
+            token = response.get('credentials', {}).get('token')
+            sign = response.get('credentials', {}).get('sign')
+            expiration_str = response.get('header', {}).get('expirationTime')
 
-        # Validación final
         if not token or not sign:
-            raise ValueError("No se pudieron extraer Token y Sign de la respuesta")
+            raise ValueError(f"No se pudo extraer Token/Sign. Respuesta recibida tipo {type(response)}")
 
-        # Limpiar formato de fecha (a veces trae milisegundos o zona horaria)
-        # Ejemplo: 2025-11-21T16:00:00.123-03:00 -> tomamos solo los primeros 19 chars
-        if expiration_str and len(expiration_str) > 19:
-            expiration_str = expiration_str[:19]
+        # Limpiar formato de fecha
+        if expiration_str and len(str(expiration_str)) > 19:
+            expiration_str = str(expiration_str)[:19]
             
-        expiration = datetime.strptime(expiration_str, "%Y-%m-%dT%H:%M:%S")
+        # Si viene como objeto datetime (caso Zeep a veces), lo usamos directo
+        if isinstance(expiration_str, datetime):
+            expiration = expiration_str
+        else:
+            expiration = datetime.strptime(expiration_str, "%Y-%m-%dT%H:%M:%S")
 
         return {
             "token": token,
@@ -86,8 +108,7 @@ def parse_wsaa_response(response):
     
     except Exception as e:
         logger.error(f"Error al parsear respuesta WSAA: {str(e)}")
-        # Logueamos qué llegó para poder debuguear si falla
-        logger.debug(f"Contenido recibido: {response}")
+        logger.debug(f"Contenido recibido para debug: {response}")
         raise
 
 def format_wsfe_error(errors):
@@ -95,6 +116,7 @@ def format_wsfe_error(errors):
     if not errors: return "Error desconocido"
     
     msgs = []
+    # Zeep a veces devuelve una lista y a veces un solo objeto
     error_list = errors.Err if hasattr(errors, 'Err') else []
     if not isinstance(error_list, list): 
         error_list = [error_list]
