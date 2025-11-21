@@ -42,7 +42,7 @@ def sign_data(data, cert_content, key_content):
         # Construir firma
         builder = pkcs7.PKCS7SignatureBuilder()\
             .set_data(data.encode('utf-8') if isinstance(data, str) else data)\
-            .add_signer(cert, key, hashes.SHA256()) # AFIP soporta SHA256
+            .add_signer(cert, key, hashes.SHA1()) # AFIP soporta SHA1
             
         # Generar PKCS7 (DER)
         signed_data = builder.sign(
