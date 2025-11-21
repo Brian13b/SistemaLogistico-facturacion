@@ -98,7 +98,9 @@ async def emitir_factura(
             currency=factura_data.currency,
             currency_rate=factura_data.currency_rate,
             vat_details=vat_details,
-            tributes_details=tributes_details
+            tributes_details=tributes_details,
+            condicion_iva_receptor_id=factura_data.condicion_iva_receptor_id,
+            can_mis_mon_ext=factura_data.can_mis_mon_ext
         )
         
         # Crear factura en AFIP

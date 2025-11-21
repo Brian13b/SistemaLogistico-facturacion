@@ -1,8 +1,9 @@
 """
-Servicio de Factura Electrónica de AFIP (WSFE) - Versión Corregida
+Servicio de Factura Electrónica de AFIP (WSFE) - Versión Final
 Cumple con especificación RG 4291 y ARCA v4.1
 """
 from datetime import datetime
+from decimal import Decimal
 from requests import Session
 from zeep import Client
 from zeep.transports import Transport
@@ -132,7 +133,6 @@ class WSFEService:
             current_date = datetime.now().strftime("%Y%m%d")
             
             # Estructura del detalle del comprobante
-            # Nota: Convertimos Decimal a float porque Zeep (SOAP) maneja mejor los floats nativos de Python
             detalle = {
                 'Concepto': invoice_request.concept,
                 'DocTipo': invoice_request.doc_type,
@@ -149,15 +149,15 @@ class WSFEService:
                 'MonId': invoice_request.currency,
                 'MonCotiz': float(invoice_request.currency_rate),
                 
-                # Nuevos campos ARCA v4.0/4.1 
+                # Nuevos campos ARCA v4.0/4.1
                 'CanMisMonExt': invoice_request.can_mis_mon_ext
             }
 
-            # Campo CondicionIVAReceptorId (Obligatorio a futuro) [cite: 44]
+            # Campo CondicionIVAReceptorId
             if invoice_request.condicion_iva_receptor_id:
                 detalle['CondicionIVAReceptorId'] = invoice_request.condicion_iva_receptor_id
 
-            # Manejo de Fechas de Servicio (si corresponde)
+            # Manejo de Fechas de Servicio
             if invoice_request.concept in (2, 3):
                 detalle['FchServDesde'] = invoice_request.service_start_date or current_date
                 detalle['FchServHasta'] = invoice_request.service_end_date or current_date
@@ -168,9 +168,9 @@ class WSFEService:
                 detalle['Iva'] = {
                     'AlicIva': [
                         {
-                            'Id': v.id,
-                            'BaseImp': float(v.base_imp),
-                            'Importe': float(v.importe)
+                            'Id': v.Id,
+                            'BaseImp': float(v.BaseImp),
+                            'Importe': float(v.Importe)
                         } for v in invoice_request.vat_details
                     ]
                 }
@@ -180,11 +180,11 @@ class WSFEService:
                 detalle['Tributos'] = {
                     'Tributo': [
                         {
-                            'Id': t.id,
-                            'Desc': t.desc,
-                            'BaseImp': float(t.base_imp),
-                            'Alic': float(t.alic),
-                            'Importe': float(t.importe)
+                            'Id': t.Id,
+                            'Desc': t.Desc,
+                            'BaseImp': float(t.BaseImp),
+                            'Alic': float(t.Alic),
+                            'Importe': float(t.Importe)
                         } for t in invoice_request.tributes_details
                     ]
                 }
@@ -207,7 +207,7 @@ class WSFEService:
             logger.info(f"Solicitando CAE para comprobante {invoice_request.voucher_type}, PV {invoice_request.sales_point}")
             result = client.service.FECAESolicitar(**invoice_data_soap)
             
-            # Verificar errores generales (Nivel Cabecera)
+            # Verificar errores generales
             if hasattr(result, 'Errors') and result.Errors:
                 error_msg = format_wsfe_error(result.Errors)
                 logger.error(f"Error al crear factura: {error_msg}")
@@ -216,14 +216,14 @@ class WSFEService:
             # Verificar respuesta del detalle
             detail_response = result.FeDetResp.FECAEDetResponse[0]
             
-            # Verificar observaciones (Warnings)
+            # Verificar observaciones
             observations = None
             if hasattr(detail_response, 'Observaciones') and detail_response.Observaciones:
                 observations = [f"Code {obs.Code}: {obs.Msg}" for obs in detail_response.Observaciones.Obs]
                 for obs in observations:
                     logger.warning(f"Observación AFIP: {obs}")
             
-            # Verificar si fue RECHAZADO a nivel detalle
+            # Verificar rechazo
             if detail_response.Resultado == 'R':
                 error_msg = f"Comprobante Rechazado. {observations}"
                 raise Exception(error_msg)
@@ -240,6 +240,7 @@ class WSFEService:
             )
             
             logger.info(f"✅ Factura creada con CAE: {invoice_response.cae}")
+            # CORRECCIÓN: Devolvemos el objeto directamente
             return invoice_response
             
         except Exception as e:
@@ -274,12 +275,10 @@ class WSFEService:
     def get_condicion_iva_receptor(self):
         """
         Nuevo método v4.0: Recuperar condiciones de IVA receptor
-        Documentado en [cite: 1578]
         """
         try:
             client = self._get_client()
             auth = self._get_auth()
-            # El parámetro ClaseCmp es opcional, si no se envía devuelve todos
             return client.service.FEParamGetCondicionIvaReceptor(Auth=auth)
         except Exception as e:
             logger.error(f"Error obteniendo condiciones IVA: {e}")

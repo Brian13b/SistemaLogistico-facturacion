@@ -39,6 +39,8 @@ class InvoiceRequest(BaseModel):
     currency_rate: float = Field(1.0, description="Cotización de la moneda")
     vat_details: Optional[List[VatDetail]] = Field(None, description="Detalles de IVA")
     tributes_details: Optional[List[TributeDetail]] = Field(None, description="Detalles de tributos")
+    condicion_iva_receptor_id: Optional[int] = None
+    can_mis_mon_ext: str = "N"
     
     @validator('service_start_date', 'service_end_date', 'payment_due_date', pre=True)
     def format_date(cls, v):
