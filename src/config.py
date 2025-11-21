@@ -43,3 +43,6 @@ class Config:
 
     # Configuración para facturación
     DEFAULT_SALES_POINT = int(os.getenv("DEFAULT_SALES_POINT", "1"))
+
+    COMPANY_NAME = os.getenv("COMPANY_NAME", "Mi Empresa S.A.")
+    COMPANY_ADDRESS = os.getenv("COMPANY_ADDRESS", "Domicilio Desconocido")

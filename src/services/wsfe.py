@@ -22,7 +22,13 @@ logger = setup_logger(__name__)
 
 class WSFEService:
     """Clase para interactuar con el servicio WSFE de AFIP"""
-    
+    class ParametroMock:
+        def __init__(self, id_, desc):
+            self.Id = id_
+            self.Desc = desc
+            self.FchDesde = "20200101"
+            self.FchHasta = "NULL"
+
     def __init__(self, cuit=None, cert_path=None, key_path=None, testing=None):
         self.wsaa_service = WSAAService(
             cuit=cuit,
@@ -86,13 +92,59 @@ class WSFEService:
             raise
             
     def get_invoice_types(self):
-        return self._get_param_data('FEParamGetTiposCbte', 'CbteTipo')
+        """
+        Obtiene tipos de comprobante (Con fallback para Testing)
+        """
+        try:
+            return self._get_param_data('FEParamGetTiposCbte', 'CbteTipo')
+        except Exception as e:
+            if self.testing:
+                logger.warning(f"Fallo AFIP (Tipos Cbte). Usando datos locales de respaldo. Error: {e}")
+                return [
+                    self.ParametroMock(1, "Factura A"),
+                    self.ParametroMock(2, "Nota de Débito A"),
+                    self.ParametroMock(3, "Nota de Crédito A"),
+                    self.ParametroMock(6, "Factura B"),
+                    self.ParametroMock(7, "Nota de Débito B"),
+                    self.ParametroMock(8, "Nota de Crédito B"),
+                    self.ParametroMock(11, "Factura C"),
+                    self.ParametroMock(12, "Nota de Débito C"),
+                    self.ParametroMock(13, "Nota de Crédito C")
+                ]
+            raise e
 
     def get_concept_types(self):
-        return self._get_param_data('FEParamGetTiposConcepto', 'ConceptoTipo')
+        """
+        Obtiene tipos de concepto (Con fallback para Testing)
+        """
+        try:
+            return self._get_param_data('FEParamGetTiposConcepto', 'ConceptoTipo')
+        except Exception as e:
+            if self.testing:
+                logger.warning(f"Fallo AFIP (Conceptos). Usando datos locales de respaldo. Error: {e}")
+                return [
+                    self.ParametroMock(1, "Productos"),
+                    self.ParametroMock(2, "Servicios"),
+                    self.ParametroMock(3, "Productos y Servicios")
+                ]
+            raise e
 
     def get_document_types(self):
-        return self._get_param_data('FEParamGetTiposDoc', 'DocTipo')
+        """
+        Obtiene tipos de documento (Con fallback para Testing)
+        """
+        try:
+            return self._get_param_data('FEParamGetTiposDoc', 'DocTipo')
+        except Exception as e:
+            if self.testing:
+                logger.warning(f"Fallo AFIP (Tipos Doc). Usando datos locales de respaldo. Error: {e}")
+                return [
+                    self.ParametroMock(80, "CUIT"),
+                    self.ParametroMock(86, "CUIL"),
+                    self.ParametroMock(96, "DNI"),
+                    self.ParametroMock(99, "Consumidor Final")
+                ]
+            raise e
 
     def get_vat_types(self):
         return self._get_param_data('FEParamGetTiposIva', 'IvaTipo')
@@ -101,7 +153,37 @@ class WSFEService:
         return self._get_param_data('FEParamGetTiposMonedas', 'Moneda')
 
     def get_sales_points(self):
-        return self._get_param_data('FEParamGetPtosVenta', 'PtoVenta')
+        try:
+            client = self._get_client()
+            auth = self._get_auth()
+            
+            logger.debug("Consultando puntos de venta")
+            result = client.service.FEParamGetPtosVenta(Auth=auth)
+            
+            if hasattr(result, 'Errors') and result.Errors:
+                error_msg = format_wsfe_error(result.Errors)
+                
+                # Si estamos en testing y AFIP dice "Sin Resultados", devolvemos uno por defecto
+                if self.testing and "602" in str(error_msg):
+                    logger.warning("AFIP devolvió 602 (Sin Puntos de Venta). Usando PV 1 por defecto para Testing.")
+                    
+                    class PtoVentaMock:
+                        def __init__(self, nro):
+                            self.Nro = nro
+                            self.Bloqueado = 'N'
+                            self.EmisionTipo = 'CAE'
+                            self.FchBaja = None
+                            
+                    return [PtoVentaMock(1)]
+
+                logger.error(f"Error al obtener puntos de venta: {error_msg}")
+                raise Exception(f"Error de AFIP: {error_msg}")
+            
+            return result.ResultGet.PtoVenta
+            
+        except Exception as e:
+            logger.error(f"Error al obtener puntos de venta: {str(e)}")
+            raise
         
     def _get_param_data(self, method_name, result_key):
         """Método genérico para obtener parámetros"""
