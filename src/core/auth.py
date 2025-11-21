@@ -159,7 +159,7 @@ class AfipAuthenticator:
             tra_xml = create_tra_xml(service, TOKEN_TTL)
             
             # Firmar TRA
-            signed_tra = sign_data(tra_xml, cert_content, key_content)
+            signed_tra = sign_data(tra_xml, cert_content, key_content, detached=False)
             
             # Crear cliente SOAP para WSAA
             # Aumentamos el timeout a 30 segundos para evitar errores en redes lentas

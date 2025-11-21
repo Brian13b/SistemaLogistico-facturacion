@@ -21,7 +21,7 @@ def read_cert_and_key(cert_path, key_path):
         
     return cert_data, key_data
 
-def sign_data(data, cert_content, key_content):
+def sign_data(data, cert_content, key_content, detached):
     """
     Firma datos (TRA) usando PKCS#7 Detached signature
     Compatible con WSAA de AFIP
@@ -37,7 +37,7 @@ def sign_data(data, cert_content, key_content):
         )
         
         # Configurar opciones de firma
-        options = [pkcs7.PKCS7Options.DetachedSignature]
+        options = [pkcs7.PKCS7Options.DetachedSignature] if detached else []
         
         # Construir firma
         builder = pkcs7.PKCS7SignatureBuilder()\
