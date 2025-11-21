@@ -2,8 +2,10 @@
 *.p12
 *.pfx
 *.crt
+*.csr
 *.key
 certs/*.crt
+certs/*.csr
 certs/*.key
 certs/*.p12
 certs/*.pfx
