@@ -112,6 +112,32 @@ async def emitir_factura(
                 detail=f"La factura fue rechazada por AFIP. Observaciones: {invoice_response.observations}"
             )
         
+        # Preparar datos para JSON (Convirtiendo Decimal a float)
+        detalles_iva_json = None
+        if factura_data.vat_details:
+            # Convertimos cada campo Decimal a float explícitamente
+            detalles_iva_json = json.dumps([
+                {
+                    'id': v.id,
+                    'base_imp': float(v.base_imp), 
+                    'importe': float(v.importe)
+                } 
+                for v in factura_data.vat_details
+            ])
+
+        detalles_tributos_json = None
+        if factura_data.tributes_details:
+            detalles_tributos_json = json.dumps([
+                {
+                    'id': t.id,
+                    'desc': t.desc,
+                    'base_imp': float(t.base_imp),
+                    'alic': float(t.alic),
+                    'importe': float(t.importe)
+                }
+                for t in factura_data.tributes_details
+            ])
+        
         # Guardar factura en la base de datos
         factura_db = Factura(
             tipo_cbte=factura_data.voucher_type,
@@ -130,12 +156,17 @@ async def emitir_factura(
             cae=invoice_response.cae,
             fecha_vto_cae=invoice_response.cae_expiration,
             estado=invoice_response.status,
+
             observaciones=json.dumps(invoice_response.observations) if invoice_response.observations else None,
             viaje_id=factura_data.viaje_id,
-            detalles_iva=json.dumps([vat.dict() for vat in factura_data.vat_details]) if factura_data.vat_details else None,
-            detalles_tributos=json.dumps([trib.dict() for trib in factura_data.tributes_details]) if factura_data.tributes_details else None,
+
+            detalles_iva=detalles_iva_json,
+            detalles_tributos=detalles_tributos_json,
             moneda=factura_data.currency,
             moneda_cotiz=factura_data.currency_rate,
+
+            condicion_iva_receptor_id=factura_data.condicion_iva_receptor_id,
+            can_mis_mon_ext=factura_data.can_mis_mon_ext,
             pdf_generado=False
         )
         
