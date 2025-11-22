@@ -36,6 +36,7 @@ class Factura(Base):
     # Estado
     estado = Column(String(1), default="A")
     observaciones = Column(Text, nullable=True)
+    descripcion = Column(Text, nullable=True)
     
     # Referencias
     viaje_id = Column(Integer, nullable=True, index=True)

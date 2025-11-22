@@ -168,9 +168,11 @@ class FacturaPDF:
         rows = [header]
         
         # Fila genérica (ya que no guardamos items individuales en este modelo simplificado)
-        concepto_txt = {1: "Productos", 2: "Servicios", 3: "Productos y Servicios"}.get(data['concepto'], "")
+        concepto_map = {1: "Productos", 2: "Servicios", 3: "Productos y Servicios"}
+        descripcion = data.get('descripcion') or f"Facturación por {concepto_map.get(data['concepto'], '')}"
+
         rows.append([
-            Paragraph(f"Facturación por {concepto_txt}", styles['Normal']),
+            Paragraph(descripcion, styles['Normal']),
             Paragraph(f"$ {neto:,.2f}", styles['Normal'])
         ])
         

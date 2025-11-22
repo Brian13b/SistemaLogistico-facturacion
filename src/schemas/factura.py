@@ -30,6 +30,7 @@ class FacturaRequestSchema(BaseModel):
         description="Obligatorio por RG 5616. Consultar FEParamGetCondicionIvaReceptor"
     )
     can_mis_mon_ext: str = Field("N", pattern="^(S|N)$", description="Cancelación Misma Moneda Extranjera")
+    description: Optional[str] = Field(None, description="Descripción del ítem o servicio")
 
     # Importes como Decimal
     total_amount: Decimal = Field(..., gt=0)
