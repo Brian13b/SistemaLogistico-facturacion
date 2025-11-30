@@ -13,6 +13,7 @@ class Config:
     # Rutas de archivos
     BASE_DIR = BASE_DIR
     CERTS_DIR = CERTS_DIR
+    PDF_OUTPUT_DIR = os.getenv("PDF_OUTPUT_DIR", "/tmp")
 
     # Configuración AFIP
     AFIP_CONFIG = {
