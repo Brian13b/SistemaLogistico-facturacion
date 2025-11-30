@@ -52,11 +52,9 @@ class InvoiceRequest(BaseModel):
             return v.strftime("%Y%m%d")
         
         if isinstance(v, str):
-            # Si ya está en formato AAAAMMDD
             if len(v) == 8 and v.isdigit():
                 return v
             
-            # Intentar convertir desde otros formatos
             for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"]:
                 try:
                     return datetime.strptime(v, fmt).strftime("%Y%m%d")

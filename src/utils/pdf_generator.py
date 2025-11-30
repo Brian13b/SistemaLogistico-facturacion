@@ -1,12 +1,9 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 import os
 import logging
 import qrcode
 import json
 from io import BytesIO
 from datetime import datetime
-from decimal import Decimal
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -16,8 +13,6 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 logger = logging.getLogger('facturacion_afip.pdf')
 
 class FacturaPDF:
-    """Generador de PDF actualizado para ARCA v4.1"""
-    
     TIPOS_COMPROBANTE = {
         1: "FACTURA A", 6: "FACTURA B", 11: "FACTURA C",
         2: "NOTA DE DÉBITO A", 7: "NOTA DE DÉBITO B", 12: "NOTA DE DÉBITO C",
@@ -28,7 +23,6 @@ class FacturaPDF:
         80: "CUIT", 86: "CUIL", 96: "DNI", 99: "Doc. Final"
     }
 
-    # Mapeo de condiciones de IVA (ARCA)
     CONDICIONES_IVA = {
         1: "IVA Responsable Inscripto",
         4: "IVA Sujeto Exento",
@@ -39,9 +33,13 @@ class FacturaPDF:
 
     def __init__(self, config):
         self.config = config
-        self.output_dir = config.get('pdf_output_dir', 'facturas_pdf')
+        self.output_dir = config.get('pdf_output_dir', '/tmp')
+        
         if not os.path.exists(self.output_dir):
-            os.makedirs(self.output_dir)
+            try:
+                os.makedirs(self.output_dir)
+            except OSError:
+                self.output_dir = '/tmp'
             
         self.empresa = {
             'razon_social': config.get('razon_social', 'MI EMPRESA S.A.'),
@@ -55,9 +53,11 @@ class FacturaPDF:
         
     def generar_pdf(self, factura_data):
         try:
-            # Convertir objeto SQLAlchemy a dict si es necesario
             if not isinstance(factura_data, dict):
                 factura_data = factura_data.__dict__
+
+            if '_sa_instance_state' in factura_data:
+                del factura_data['_sa_instance_state']
 
             tipo_letra = self._get_letra(factura_data['tipo_cbte'])
             filename = f"{tipo_letra}_{factura_data['punto_vta']:04d}_{factura_data['numero']:08d}.pdf"
@@ -91,20 +91,28 @@ class FacturaPDF:
         canvas.setTitle(f"Factura {self.factura_actual.get('numero')}")
         canvas.setAuthor(self.empresa['razon_social'])
 
+    def _format_date(self, date_str):
+        if not date_str: return "-"
+        try:
+            d = str(date_str).strip()
+            if len(d) == 8 and d.isdigit(): 
+                return f"{d[6:8]}/{d[4:6]}/{d[0:4]}"
+            if "-" in d: 
+                return datetime.strptime(d, "%Y-%m-%d").strftime("%d/%m/%Y")
+            return d
+        except: return str(date_str)
+
     def _crear_encabezado(self, data, letra):
         styles = getSampleStyleSheet()
         tipo_nombre = self.TIPOS_COMPROBANTE.get(data['tipo_cbte'], "COMPROBANTE")
         
-        # Tabla superior
         logo = self._get_logo()
         
-        # Columna Central (Letra)
         col_letra = [
             Paragraph(f"<b>{letra}</b>", ParagraphStyle('Letra', fontSize=36, alignment=1, spaceAfter=10)),
             Paragraph(f"Cod. {data['tipo_cbte']:02d}", ParagraphStyle('Cod', fontSize=9, alignment=1))
         ]
 
-        # Columna Derecha (Datos Factura)
         fecha = self._format_date(data['fecha_cbte'])
         col_dat = [
             Paragraph(f"<b>{tipo_nombre}</b>", styles['Heading3']),
@@ -116,7 +124,6 @@ class FacturaPDF:
             Paragraph(f"Ini. Actividades: {self.empresa['inicio_actividades']}", styles['Normal']),
         ]
 
-        # Columna Izquierda (Empresa)
         col_emp = [
             logo if logo else Spacer(1,1),
             Paragraph(f"<b>{self.empresa['razon_social']}</b>", styles['Heading3']),
@@ -127,7 +134,7 @@ class FacturaPDF:
 
         table = Table([[col_emp, col_letra, col_dat]], colWidths=[7*cm, 3*cm, 9*cm])
         table.setStyle(TableStyle([
-            ('BOX', (1,0), (1,0), 1, colors.black), # Cuadro letra
+            ('BOX', (1,0), (1,0), 1, colors.black),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('ALIGN', (1,0), (1,0), 'CENTER'),
         ]))
@@ -135,17 +142,13 @@ class FacturaPDF:
 
     def _crear_datos_cliente(self, data):
         styles = getSampleStyleSheet()
-        
-        # Obtener descripción de condición IVA del receptor (ARCA)
         cond_iva_id = data.get('condicion_iva_receptor_id')
         cond_iva_txt = self.CONDICIONES_IVA.get(cond_iva_id, "Consumidor Final")
-        
         doc_tipo = self.TIPOS_DOCUMENTO.get(data['tipo_doc'], str(data['tipo_doc']))
         
         rows = [
             [Paragraph(f"<b>Cliente:</b> Doc. {doc_tipo}: {data['nro_doc']}", styles['Normal'])],
             [Paragraph(f"<b>Condición IVA:</b> {cond_iva_txt}", styles['Normal'])],
-            [Paragraph(f"<b>Domicilio:</b> -", styles['Normal'])] # Podrías agregarlo al modelo si lo tienes
         ]
         
         t = Table(rows, colWidths=[19*cm])
@@ -158,19 +161,13 @@ class FacturaPDF:
 
     def _crear_detalles_factura(self, data):
         styles = getSampleStyleSheet()
-        header = [
-            Paragraph("<b>Concepto</b>", styles['Normal']),
-            Paragraph("<b>Subtotal</b>", styles['Normal'])
-        ]
+        header = [Paragraph("<b>Concepto / Descripción</b>", styles['Normal']), Paragraph("<b>Subtotal</b>", styles['Normal'])]
         
-        # Convertir Decimal a float para formateo
         neto = float(data['imp_neto'])
-        rows = [header]
-        
-        # Fila genérica (ya que no guardamos items individuales en este modelo simplificado)
         concepto_map = {1: "Productos", 2: "Servicios", 3: "Productos y Servicios"}
         descripcion = data.get('descripcion') or f"Facturación por {concepto_map.get(data['concepto'], '')}"
 
+        rows = [header]
         rows.append([
             Paragraph(descripcion, styles['Normal']),
             Paragraph(f"$ {neto:,.2f}", styles['Normal'])
@@ -192,13 +189,17 @@ class FacturaPDF:
         rows = []
         rows.append(["Subtotal Neto:", f"$ {float(data['imp_neto']):,.2f}"])
         
-        # Desglosar IVA si existe
         if data.get('detalles_iva'):
-            ivas = json.loads(data['detalles_iva']) if isinstance(data['detalles_iva'], str) else data['detalles_iva']
-            for iv in ivas:
-                # Mapeo ID AFIP a texto
-                tasa = {5: "21%", 4: "10.5%", 6: "27%"}.get(iv['Id'], str(iv['Id']))
-                rows.append([f"IVA {tasa}:", f"$ {float(iv['Importe']):,.2f}"])
+            try:
+                ivas = json.loads(data['detalles_iva']) if isinstance(data['detalles_iva'], str) else data['detalles_iva']
+                for iv in ivas:
+                    id_iva = iv.get('Id') or iv.get('id')
+                    importe_iva = iv.get('Importe') or iv.get('importe')
+                    
+                    tasa = {5: "21%", 4: "10.5%", 6: "27%"}.get(id_iva, str(id_iva))
+                    rows.append([f"IVA {tasa}:", f"$ {float(importe_iva):,.2f}"])
+            except Exception as e:
+                logger.warning(f"Error procesando detalle IVA en PDF: {e}")
         
         if float(data.get('imp_trib', 0)) > 0:
             rows.append(["Tributos:", f"$ {float(data['imp_trib']):,.2f}"])
@@ -215,56 +216,48 @@ class FacturaPDF:
 
     def _crear_cae_qr(self, data):
         styles = getSampleStyleSheet()
-        
-        # Texto CAE
         cae_info = [
             Paragraph(f"<b>CAE: {data['cae']}</b>", styles['Normal']),
             Paragraph(f"<b>Vencimiento CAE: {self._format_date(data['fecha_vto_cae'])}</b>", styles['Normal'])
         ]
-        
-        # Generar QR
         qr_img = self._generar_qr(data)
-        
         t = Table([[cae_info, qr_img]], colWidths=[14*cm, 5*cm])
         t.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'MIDDLE')]))
         return [t]
 
     def _generar_qr(self, data):
-        # Datos requeridos por AFIP para QR
-        qr_dict = {
-            "ver": 1,
-            "fecha": data['fecha_cbte'],
-            "cuit": int(self.empresa['cuit'].replace("-", "")),
-            "ptoVta": data['punto_vta'],
-            "tipoCmp": data['tipo_cbte'],
-            "nroCmp": data['numero'],
-            "importe": float(data['imp_total']),
-            "moneda": data['moneda'],
-            "ctz": float(data['moneda_cotiz']),
-            "tipoDocRec": data['tipo_doc'],
-            "nroDocRec": int(data['nro_doc']),
-            "tipoCodAut": "E", # E para CAE
-            "codAut": int(data['cae'])
-        }
-        
-        qr_str = json.dumps(qr_dict)
-        # Codificar en base64 como pide AFIP
-        qr_b64 = base64.b64encode(qr_str.encode()).decode()
-        url_qr = f"https://www.afip.gob.ar/fe/qr/?p={qr_b64}"
-        
-        qr = qrcode.make(url_qr)
-        img_buffer = BytesIO()
-        qr.save(img_buffer)
-        img_buffer.seek(0)
-        return Image(img_buffer, width=3*cm, height=3*cm)
+        try:
+            cuit = self.empresa['cuit'].replace("-", "")
+            qr_dict = {
+                "ver": 1,
+                "fecha": data['fecha_cbte'],
+                "cuit": int(cuit) if cuit.isdigit() else 0,
+                "ptoVta": data['punto_vta'],
+                "tipoCmp": data['tipo_cbte'],
+                "nroCmp": data['numero'],
+                "importe": float(data['imp_total']),
+                "moneda": data['moneda'],
+                "ctz": float(data['moneda_cotiz']),
+                "tipoDocRec": data['tipo_doc'],
+                "nroDocRec": int(data['nro_doc']) if str(data['nro_doc']).isdigit() else 0,
+                "tipoCodAut": "E",
+                "codAut": int(data['cae']) if str(data['cae']).isdigit() else 0
+            }
+            
+            qr_str = json.dumps(qr_dict)
+            qr_b64 = base64.b64encode(qr_str.encode()).decode()
+            url_qr = f"https://www.afip.gob.ar/fe/qr/?p={qr_b64}"
+            
+            qr = qrcode.make(url_qr)
+            img_buffer = BytesIO()
+            qr.save(img_buffer)
+            img_buffer.seek(0)
+            return Image(img_buffer, width=3*cm, height=3*cm)
+        except Exception as e:
+            logger.error(f"Error generando QR: {e}")
+            return Spacer(1,1)
 
     def _get_logo(self):
         if self.empresa['logo_path'] and os.path.exists(self.empresa['logo_path']):
             return Image(self.empresa['logo_path'], width=4*cm, height=2*cm)
         return None
-
-    def _format_date(self, date_str):
-        if not date_str: return "-"
-        try:
-            return datetime.strptime(str(date_str), "%Y%m%d").strftime("%d/%m/%Y")
-        except: return date_str

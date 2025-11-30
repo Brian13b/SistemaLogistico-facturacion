@@ -84,7 +84,7 @@ class FacturaResponseSchema(BaseModel):
     cae: str
     fecha_vto_cae: str
     numero: int
-    imp_total: float # Pydantic serializará Decimal a float/string
+    imp_total: float 
     estado: str
     pdf_generado: bool
     
