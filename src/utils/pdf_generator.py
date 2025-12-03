@@ -247,8 +247,8 @@ class FacturaPDF:
         neto = float(data['imp_neto'])
         descripcion = data.get('descripcion') or "Servicios logísticos"
         cantidad = float(data.get('cantidad', 1.0))
-        precio_unit = float(data.get('precio_unitario', data['imp_neto'])) 
-        unidad = data.get('unidad_medida', 'Unidad')
+        precio_unit = float(data.get('precio_unitario', data['imp_neto']))
+        unidad = str(data.get('unidad_medida') or 'Unidad')
         alicuota = float(data.get('alicuota_iva', 21.0))
 
         subtotal_neto = cantidad * precio_unit
@@ -259,12 +259,12 @@ class FacturaPDF:
         item_row = [
             Paragraph("", s['Small']),                          # Código
             Paragraph(descripcion, s['Small']),                 # Descripción
-            Paragraph(cantidad, s['Right']),                    # Cantidad
+            Paragraph(f"{cantidad:.2f}", s['Right']),           # Cantidad
             Paragraph(unidad, s['Small']),                      # U. Medida
             Paragraph(f"{precio_unit:,.2f}", s['Right']),       # Precio Unit.
             Paragraph("0,00", s['Right']),                      # % Bonif.
             Paragraph(f"{subtotal_neto:,.2f}", s['Right']),     # Subtotal
-            Paragraph(alicuota, s['Right']),                    # Alicuota IVA
+            Paragraph(f"{alicuota:.2f}%", s['Right']),          # Alicuota IVA
             Paragraph(f"{subtotal_final:,.2f}", s['Right']),    # Subtotal c/IVA
         ]
 
