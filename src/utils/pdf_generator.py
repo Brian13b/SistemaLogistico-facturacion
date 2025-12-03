@@ -269,8 +269,7 @@ class FacturaPDF:
         ]
 
         rows = [header_row, item_row]
-        rows = []
-
+        
         widths = [1.2*cm, 5.5*cm, 1.5*cm, 1.8*cm, 2.0*cm, 1.5*cm, 2.0*cm, 1.5*cm, 2.0*cm]
         
         t = Table(rows, colWidths=widths)
