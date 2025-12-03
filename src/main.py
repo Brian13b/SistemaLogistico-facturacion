@@ -10,8 +10,7 @@ from config import Config
 
 
 def parse_arguments():
-    """Parsea los argumentos de línea de comandos"""
-    parser = argparse.ArgumentParser(description='Sistema de Facturación Electrónica AFIP')
+    parser = argparse.ArgumentParser(description='Sistema de Facturación Electrónica ARCA')
     
     subparsers = parser.add_subparsers(dest='comando', help='Comandos disponibles')
     
@@ -71,14 +70,11 @@ def parse_arguments():
 
 
 def main():
-    """Función principal"""
     args = parse_arguments()
     
-    # Configurar el logger
     log_level = logging.DEBUG if args.debug else logging.INFO
     logger = setup_logger('facturacion_afip', log_level)
     
-    # Cargar configuración
     try:
         config = Config(args.config)
         entorno = 'produccion' if args.produccion else 'homologacion'
@@ -87,7 +83,6 @@ def main():
         logger.error(f"Error al cargar la configuración: {e}")
         sys.exit(1)
     
-    # Inicializar cliente
     try:
         client = AfipClient(
             cuit=config.get('cuit'),
@@ -100,7 +95,6 @@ def main():
         logger.error(f"Error al inicializar el cliente AFIP: {e}")
         sys.exit(1)
     
-    # Procesar comandos
     try:
         if args.comando == 'factura':
             procesar_comando_factura(args, wsfe, logger)
@@ -136,9 +130,7 @@ def main():
 
 
 def procesar_comando_factura(args, wsfe, logger):
-    """Procesa los comandos relacionados con facturas con precisión decimal"""
     if args.factura_comando == 'generar':
-        # Mapeo de tipos de factura
         tipo_cbte_map = {'A': 1, 'B': 6, 'C': 11}
         tipo_comprobante = tipo_cbte_map.get(args.tipo)
         
@@ -146,7 +138,6 @@ def procesar_comando_factura(args, wsfe, logger):
             logger.error(f"Tipo de factura inválido: {args.tipo}")
             return
 
-        # Fecha
         if args.fecha:
             try:
                 fecha = datetime.strptime(args.fecha, '%Y%m%d')
@@ -156,28 +147,23 @@ def procesar_comando_factura(args, wsfe, logger):
         else:
             fecha = datetime.now()
         
-        # --- CÁLCULOS FINANCIEROS SEGUROS ---
-        importe_total = Decimal(str(args.importe)) # Convertir str para evitar float error
+        importe_total = Decimal(str(args.importe))
         
-        # Lógica simplificada de IVA (Asumiendo 21% por defecto para Factura A)
-        # En un sistema real, esto debería venir de los ítems o argumentos
         imp_neto = importe_total
         imp_iva = Decimal('0')
         
         ali_iva = []
         
         if args.tipo == 'A':
-            # Desglosar IVA 21% (Divisor 1.21)
             imp_neto = (importe_total / Decimal('1.21')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             imp_iva = importe_total - imp_neto
             
             ali_iva = [{
-                'id': 5,  # Código AFIP para 21%
+                'id': 5,  # Código para 21%
                 'base_imp': float(imp_neto),
                 'importe': float(imp_iva)
             }]
 
-        # Datos para la factura (Convertimos a float al final porque SOAP lo pide así)
         factura_data = {
             'tipo_cbte': tipo_comprobante,
             'punto_vta': args.punto_venta,
@@ -195,30 +181,26 @@ def procesar_comando_factura(args, wsfe, logger):
             'fecha_venc_pago': fecha.strftime('%Y%m%d'),
             'moneda_id': 'PES',
             'moneda_ctz': 1,
-            'iva': ali_iva # Lista vacía si no es A
+            'iva': ali_iva 
         }
         
         # Crear factura
         try:
             result = wsfe.crear_factura(factura_data)
             if result['success']:
-                print(f"\n✅ Factura generada con éxito:")
-                print(f"   CAE: {result['cae_data']['cae']}")
-                print(f"   Vencimiento: {result['cae_data']['fecha_vto']}")
+                print(f"\nFactura generada con éxito")
             else:
                 print(f"\n❌ Error AFIP: {result.get('error', 'Desconocido')}")
         except Exception as e:
             logger.error(f"Error de conexión/proceso: {e}")
     
     elif args.factura_comando == 'consultar':
-        # Mapeo de tipos de factura
         tipo_comprobante = {
             'A': 1,
             'B': 6,
             'C': 11
         }[args.tipo]
         
-        # Consultar factura
         result = wsfe.consultar_factura(tipo_comprobante, args.punto_venta, args.numero)
         
         if result['success']:
@@ -229,14 +211,12 @@ def procesar_comando_factura(args, wsfe, logger):
             print(f"\nError al consultar la factura: {result['error']}")
     
     elif args.factura_comando == 'ultimo':
-        # Mapeo de tipos de factura
         tipo_comprobante = {
             'A': 1,
             'B': 6,
             'C': 11
         }[args.tipo]
         
-        # Obtener último número
         result = wsfe.get_ultimo_comprobante(tipo_comprobante, args.punto_venta)
         
         if result['success']:
@@ -250,7 +230,6 @@ def procesar_comando_factura(args, wsfe, logger):
 
 
 def print_tabla(data, headers):
-    """Imprime una tabla formateada con los datos"""
     if not data:
         print("No hay datos para mostrar")
         return

@@ -1,6 +1,3 @@
-"""
-Modelos de datos para el sistema de facturación
-"""
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel, Field, validator
@@ -44,7 +41,6 @@ class InvoiceRequest(BaseModel):
     
     @validator('service_start_date', 'service_end_date', 'payment_due_date', pre=True)
     def format_date(cls, v):
-        """Formatea las fechas al formato requerido por AFIP"""
         if v is None:
             return None
         
@@ -77,7 +73,6 @@ class InvoiceResponse(BaseModel):
     
     @property
     def is_approved(self):
-        """Indica si la factura fue aprobada"""
         return self.status == "A" and self.cae and not self.errors
 
 class AfipAuth(BaseModel):
@@ -89,5 +84,4 @@ class AfipAuth(BaseModel):
     
     @property
     def is_valid(self):
-        """Indica si la autenticación es válida"""
         return datetime.now() < self.expiration

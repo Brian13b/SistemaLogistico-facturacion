@@ -1,11 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-"""
-Generador de PDF para las facturas electrónicas de AFIP
-Estilo estándar RG 1415
-"""
-
 import os
 import logging
 import json
@@ -23,7 +15,6 @@ from reportlab.graphics.shapes import Drawing
 logger = logging.getLogger('facturacion_afip.pdf')
 
 class FacturaPDF:
-    """Generador de PDF con diseño estándar AFIP"""
     
     TIPOS_COMPROBANTE = {
         1: "FACTURA A", 6: "FACTURA B", 11: "FACTURA C",
@@ -56,11 +47,11 @@ class FacturaPDF:
         self.empresa = {
             'razon_social': config.get('razon_social', 'MI EMPRESA S.A.'),
             'domicilio': config.get('domicilio', 'Domicilio Fiscal Desconocido'),
-            'localidad': config.get('localidad', ''),
+            'localidad': config.get('localidad', 'Paraná, Entre Ríos'),
             'cuit': config.get('cuit', ''),
             'condicion_iva': config.get('condicion_iva', 'IVA Responsable Inscripto'),
-            'inicio_actividades': config.get('inicio_actividades', '-'),
-            'ingresos_brutos': config.get('ingresos_brutos', '-'),
+            'inicio_actividades': config.get('inicio_actividades', '01/01/2023'),
+            'ingresos_brutos': config.get('ingresos_brutos', '20406953425'),
             'logo_path': config.get('logo_path', None)
         }
         
@@ -69,7 +60,6 @@ class FacturaPDF:
             if not isinstance(factura_data, dict):
                 factura_data = factura_data.__dict__
 
-            # Limpieza de objeto SQLAlchemy
             if '_sa_instance_state' in factura_data:
                 del factura_data['_sa_instance_state']
 
@@ -77,7 +67,6 @@ class FacturaPDF:
             filename = f"{tipo_letra}_{factura_data['punto_vta']:04d}_{factura_data['numero']:08d}.pdf"
             output_path = os.path.join(self.output_dir, filename)
             
-            # Márgenes estrechos para aprovechar la hoja A4
             doc = SimpleDocTemplate(
                 output_path, 
                 pagesize=A4, 
@@ -90,19 +79,19 @@ class FacturaPDF:
             self.factura_actual = factura_data
             elements = []
             
-            # 1. Encabezado Principal (Empresa + Letra + Datos Factura)
+            # Encabezado Principal (Empresa + Letra + Datos Factura)
             elements.extend(self._crear_encabezado_principal(factura_data, tipo_letra))
             
-            # 2. Período y Fechas
+            # Período y Fechas
             elements.extend(self._crear_barra_periodo(factura_data))
             
-            # 3. Datos del Cliente
+            # Datos del Cliente
             elements.extend(self._crear_datos_cliente(factura_data))
             
-            # 4. Tabla de Items
+            # Descripción
             elements.extend(self._crear_tabla_items(factura_data))
             
-            # 5. Totales y Pie
+            # Totales y Pie
             elements.extend(self._crear_totales_y_pie(factura_data))
             
             doc.build(elements, onFirstPage=self._agregar_metadata)
@@ -139,15 +128,15 @@ class FacturaPDF:
         styles.add(ParagraphStyle(name='BoldSmall', fontSize=8, leading=10, fontName='Helvetica-Bold'))
         styles.add(ParagraphStyle(name='CenterBold', fontSize=10, alignment=TA_CENTER, fontName='Helvetica-Bold'))
         styles.add(ParagraphStyle(name='Right', fontSize=9, alignment=TA_RIGHT))
-        styles.add(ParagraphStyle(name='LetraGrande', fontSize=28, alignment=TA_CENTER, fontName='Helvetica-Bold'))
-        styles.add(ParagraphStyle(name='CodigoLetra', fontSize=8, alignment=TA_CENTER, fontName='Helvetica-Bold'))
+        styles.add(ParagraphStyle(name='LetraGrande', fontSize=28, leading=30, alignment=TA_CENTER, fontName='Helvetica-Bold'))
+        styles.add(ParagraphStyle(name='CodigoLetra', fontSize=8, leading=8, alignment=TA_CENTER, fontName='Helvetica-Bold'))
         return styles
 
     def _crear_encabezado_principal(self, data, letra):
         s = self._estilos()
         tipo_nombre = self.TIPOS_COMPROBANTE.get(data['tipo_cbte'], "COMPROBANTE")
         
-        # --- COLUMNA IZQUIERDA (EMPRESA) ---
+        # COLUMNA IZQUIERDA
         logo = self._get_logo()
         empresa_info = [
             logo if logo else Spacer(1, 1),
@@ -157,19 +146,18 @@ class FacturaPDF:
             Paragraph(f"<b>Condición frente al IVA:</b> {self.empresa['condicion_iva']}", s['Small']),
         ]
 
-        # --- COLUMNA CENTRAL (LETRA) ---
-        # Cuadro con la letra A/B/C y el código
+        # COLUMNA CENTRAL
         cuadro_letra = Table([
             [Paragraph(letra, s['LetraGrande'])],
             [Paragraph(f"COD. {data['tipo_cbte']:02d}", s['CodigoLetra'])]
-        ], colWidths=[1.5*cm])
+        ], colWidths=[1.5*cm], rowHeights=[1.0*cm, 0.5*cm])
         cuadro_letra.setStyle(TableStyle([
             ('BOX', (0,0), (-1,-1), 1, colors.black),
             ('BOTTOMPADDING', (0,0), (-1,-1), 0),
             ('TOPPADDING', (0,0), (-1,-1), 0),
         ]))
 
-        # --- COLUMNA DERECHA (DATOS FACTURA) ---
+        # COLUMNA DERECHA
         factura_info = [
             Paragraph(f"<b>{tipo_nombre}</b>", s['Heading3']),
             Spacer(1, 5),
@@ -181,24 +169,21 @@ class FacturaPDF:
             Paragraph(f"<b>Inicio de Actividades:</b> {self.empresa['inicio_actividades']}", s['Small']),
         ]
 
-        # Tabla Maestra del Encabezado (2 columnas + letra flotante visualmente)
-        # Simulamos la linea divisoria con un borde derecho en la primera celda
         tabla_header = Table([
             [empresa_info, cuadro_letra, factura_info]
         ], colWidths=[8*cm, 2*cm, 9*cm])
         
         tabla_header.setStyle(TableStyle([
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('LINEAFTER', (0,0), (0,0), 0.5, colors.black), # Línea vertical al medio (técnicamente a la derecha de col 1)
-            ('ALIGN', (1,0), (1,0), 'CENTER'), # Letra centrada
-            ('LEFTPADDING', (2,0), (2,0), 10), # Margen para la col derecha
+            ('LINEAFTER', (0,0), (0,0), 0.5, colors.black),
+            ('ALIGN', (1,0), (1,0), 'CENTER'),
+            ('LEFTPADDING', (2,0), (2,0), 10),
         ]))
 
         return [tabla_header, Spacer(1, 0.2*cm)]
 
     def _crear_barra_periodo(self, data):
         s = self._estilos()
-        # Fechas de servicio (si existen)
         f_desde = self._format_date(data.get('fecha_serv_desde') or data['fecha_cbte'])
         f_hasta = self._format_date(data.get('fecha_serv_hasta') or data['fecha_cbte'])
         f_vto = self._format_date(data.get('fecha_vto_pago') or data['fecha_cbte'])
@@ -212,7 +197,6 @@ class FacturaPDF:
         t = Table([row], colWidths=[6.3*cm, 6.3*cm, 6.4*cm])
         t.setStyle(TableStyle([
             ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
             ('PADDING', (0,0), (-1,-1), 4),
         ]))
@@ -228,12 +212,12 @@ class FacturaPDF:
         # Fila 1
         r1 = [
             Paragraph(f"<b>{doc_tipo}:</b> {data['nro_doc']}", s['Small']),
-            Paragraph(f"<b>Apellido y Nombre / Razón Social:</b> -", s['Small']), # Nombre no guardado en este modelo simplificado
+            Paragraph(f"<b>Apellido y Nombre / Razón Social:</b> Empresa Ficticia S.A.", s['Small']), 
         ]
         # Fila 2
         r2 = [
             Paragraph(f"<b>Condición frente al IVA:</b> {cond_iva_txt}", s['Small']),
-            Paragraph(f"<b>Domicilio:</b> -", s['Small']),
+            Paragraph(f"<b>Domicilio:</b> Av. Ficticia 123, Paraná, Entre Ríos", s['Small']),
         ]
         # Fila 3
         r3 = [
@@ -244,10 +228,9 @@ class FacturaPDF:
         t = Table([r1, r2, r3], colWidths=[6*cm, 13*cm])
         t.setStyle(TableStyle([
             ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-            #('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
             ('PADDING', (0,0), (-1,-1), 4),
-            ('SPAN', (1,2), (1,2)) # Span para la última celda vacía
+            ('SPAN', (1,2), (1,2)) 
         ]))
         return [t, Spacer(1, 0.5*cm)]
 
@@ -257,41 +240,45 @@ class FacturaPDF:
         # Encabezados exactos del modelo
         headers = [
             "Código", "Producto / Servicio", "Cantidad", "U. Medida", 
-            "Precio Unit.", "% Bonif.", "Imp. Bonif.", "Subtotal"
+            "Precio Unit.", "% Bonif.", "Subtotal", "Alicuota IVA", "Subtotal c/IVA"
         ]
         header_row = [Paragraph(f"<b>{h}</b>", s['CenterBold']) for h in headers]
 
-        # Construcción de la fila del ítem (Simulada desde totales ya que no guardamos ítems individuales)
         neto = float(data['imp_neto'])
-        concepto_map = {1: "Productos", 2: "Servicios", 3: "Productos y Servicios"}
-        descripcion = data.get('descripcion') or f"Facturación por {concepto_map.get(data['concepto'], '')}"
+        descripcion = data.get('descripcion') or "Servicios logísticos"
+        cantidad = float(data.get('cantidad', 1.0))
+        precio_unit = float(data.get('precio_unitario', data['imp_neto'])) 
+        unidad = data.get('unidad_medida', 'Unidad')
+        alicuota = float(data.get('alicuota_iva', 21.0))
+
+        subtotal_neto = cantidad * precio_unit
+        monto_iva = subtotal_neto * (alicuota / 100)
+        subtotal_final = subtotal_neto + monto_iva
         
         # Fila de datos
         item_row = [
-            Paragraph("001", s['Small']),               # Código
-            Paragraph(descripcion, s['Small']),         # Descripción
-            Paragraph("1,00", s['Right']),              # Cantidad
-            Paragraph("Unidad", s['Small']),            # U. Medida
-            Paragraph(f"{neto:,.2f}", s['Right']),      # Precio Unit.
-            Paragraph("0,00", s['Right']),              # % Bonif.
-            Paragraph("0,00", s['Right']),              # Imp. Bonif.
-            Paragraph(f"{neto:,.2f}", s['Right'])       # Subtotal
+            Paragraph("", s['Small']),                          # Código
+            Paragraph(descripcion, s['Small']),                 # Descripción
+            Paragraph(cantidad, s['Right']),                    # Cantidad
+            Paragraph(unidad, s['Small']),                      # U. Medida
+            Paragraph(f"{precio_unit:,.2f}", s['Right']),       # Precio Unit.
+            Paragraph("0,00", s['Right']),                      # % Bonif.
+            Paragraph(f"{subtotal_neto:,.2f}", s['Right']),     # Subtotal
+            Paragraph(alicuota, s['Right']),                    # Alicuota IVA
+            Paragraph(f"{subtotal_final:,.2f}", s['Right']),    # Subtotal c/IVA
         ]
 
-        # Generar filas vacías para llenar espacio si se desea, aquí solo 1
         rows = [header_row, item_row]
+        rows = []
 
-        # Definir anchos de columna (ajustados al ancho A4)
-        # Total disponible ~19cm
-        widths = [1.5*cm, 6*cm, 1.5*cm, 2*cm, 2*cm, 2*cm, 2*cm, 2*cm]
+        widths = [1.2*cm, 5.5*cm, 1.5*cm, 1.8*cm, 2.0*cm, 1.5*cm, 2.0*cm, 1.5*cm, 2.0*cm]
         
         t = Table(rows, colWidths=widths)
         t.setStyle(TableStyle([
             ('BOX', (0,0), (-1,-1), 1, colors.black),
-            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey), # Fondo encabezado
+            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('ALIGN', (1,1), (1,-1), 'LEFT'), # Descripción a la izquierda
-            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('ALIGN', (1,1), (1,-1), 'LEFT'), 
             ('PADDING', (0,0), (-1,-1), 4),
         ]))
         
@@ -300,8 +287,6 @@ class FacturaPDF:
     def _crear_totales_y_pie(self, data):
         s = self._estilos()
         
-        # --- TABLA DE TOTALES (Alineada a la derecha) ---
-        # Filas: Subtotal, Otros Tributos, Total
         neto = float(data['imp_neto'])
         iva = float(data['imp_iva'])
         trib = float(data.get('imp_trib', 0))
@@ -310,7 +295,6 @@ class FacturaPDF:
         rows = []
         rows.append(["Subtotal:", f"$ {neto:,.2f}"])
         
-        # Detalle IVA (Solo si es A)
         if data['tipo_cbte'] in [1, 2, 3]:
              rows.append(["IVA Inscripto:", f"$ {iva:,.2f}"])
         
@@ -319,28 +303,24 @@ class FacturaPDF:
             
         rows.append([Paragraph("<b>Importe Total:</b>", s['BoldSmall']), Paragraph(f"<b>$ {total:,.2f}</b>", s['BoldSmall'])])
         
-        # Tabla de totales flota a la derecha
-        # Usamos una tabla contenedora: Izquierda (QR/CAE) - Derecha (Totales)
-        
-        # IZQUIERDA: QR y CAE
+        # QR y CAE
         qr_img = self._generar_qr(data)
         cae_text = [
             Paragraph(f"<b>CAE N°: {data['cae']}</b>", s['BoldSmall']),
             Paragraph(f"<b>Fecha de Vto. de CAE: {self._format_date(data['fecha_vto_cae'])}</b>", s['BoldSmall']),
         ]
         
-        # Si hay logo de AFIP se pondría aquí, usaremos el QR y texto
         left_content = Table([[qr_img, cae_text]], colWidths=[3.5*cm, 6*cm])
         left_content.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'MIDDLE')]))
 
-        # DERECHA: Tabla de números
+        # Tabla derecha
         right_content = Table(rows, colWidths=[4*cm, 3*cm])
         right_content.setStyle(TableStyle([
             ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
-            ('FONTNAME', (-2,-1), (-1,-1), 'Helvetica-Bold'), # Negrita al total
+            ('FONTNAME', (-2,-1), (-1,-1), 'Helvetica-Bold'), 
             ('BOX', (0,0), (-1,-1), 0.5, colors.black),
             ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
-            ('BACKGROUND', (-2,-1), (-1,-1), colors.lightgrey), # Fondo al total
+            ('BACKGROUND', (-2,-1), (-1,-1), colors.lightgrey), 
         ]))
 
         # Tabla Contenedora del Pie
@@ -384,8 +364,3 @@ class FacturaPDF:
         except Exception as e:
             logger.error(f"Error generando QR: {e}")
             return Spacer(1,1)
-
-    def _get_logo(self):
-        if self.empresa['logo_path'] and os.path.exists(self.empresa['logo_path']):
-            return Image(self.empresa['logo_path'], width=4*cm, height=2*cm)
-        return None

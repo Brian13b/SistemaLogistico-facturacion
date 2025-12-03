@@ -1,6 +1,3 @@
-"""
-Rutas de la API REST para facturación
-"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -27,8 +24,6 @@ logger = setup_logger(__name__)
 
 router = APIRouter(prefix="/api/facturas", tags=["facturas"])
 
-
-# Inicializar cliente AFIP
 def get_afip_client():
     """Obtiene una instancia del cliente AFIP"""
     afip_config = Config.AFIP_CONFIG
@@ -41,19 +36,8 @@ def get_afip_client():
 
 
 @router.post("/emitir", response_model=FacturaResponseSchema, status_code=status.HTTP_201_CREATED)
-async def emitir_factura(
-    factura_data: FacturaRequestSchema,
-    db: Session = Depends(get_db),
-    afip_client: AfipClient = Depends(get_afip_client)
-):
-    """
-    Emite una factura electrónica a través del WebService de AFIP
-    
-    En modo homologación, se generan facturas ficticias para pruebas.
-    """
+async def emitir_factura(factura_data: FacturaRequestSchema, db: Session = Depends(get_db), afip_client: AfipClient = Depends(get_afip_client)):
     try:
-        logger.info(f"Recibida solicitud de factura: Tipo {factura_data.voucher_type}, PV {factura_data.sales_point}")
-        
         # Convertir los detalles de IVA y tributos al formato del modelo
         vat_details = None
         if factura_data.vat_details:
@@ -112,7 +96,7 @@ async def emitir_factura(
                 detail=f"La factura fue rechazada por AFIP. Observaciones: {invoice_response.observations}"
             )
         
-        # Preparar datos para JSON (Convirtiendo Decimal a float)
+        # Preparar datos para JSON
         detalles_iva_json = None
         if factura_data.vat_details:
             # Convertimos cada campo Decimal a float explícitamente
@@ -147,6 +131,10 @@ async def emitir_factura(
             concepto=factura_data.concept,
             tipo_doc=factura_data.doc_type,
             nro_doc=factura_data.doc_number,
+            cantidad=factura_data.cantidad,
+            unidad_medida=factura_data.unidad_medida,
+            precio_unitario=factura_data.precio_unitario,
+            alicuota_iva=factura_data.alicuota_iva,
             imp_total=factura_data.total_amount,
             imp_neto=factura_data.net_amount,
             imp_iva=factura_data.vat_amount,
@@ -189,15 +177,7 @@ async def emitir_factura(
 
 
 @router.get("/", response_model=List[FacturaListSchema])
-async def listar_facturas(
-    skip: int = 0,
-    limit: int = 50,
-    viaje_id: Optional[int] = None,
-    db: Session = Depends(get_db)
-):
-    """
-    Lista las facturas emitidas
-    """
+async def listar_facturas(skip: int = 0, limit: int = 50, viaje_id: Optional[int] = None, db: Session = Depends(get_db)):
     try:
         query = db.query(Factura)
         
@@ -216,13 +196,7 @@ async def listar_facturas(
 
 
 @router.get("/{factura_id}", response_model=FacturaResponseSchema)
-async def obtener_factura(
-    factura_id: int,
-    db: Session = Depends(get_db)
-):
-    """
-    Obtiene los detalles de una factura específica
-    """
+async def obtener_factura(factura_id: int, db: Session = Depends(get_db)):
     try:
         factura = db.query(Factura).filter(Factura.id == factura_id).first()
         
@@ -245,13 +219,7 @@ async def obtener_factura(
 
 
 @router.post("/consultar", response_model=dict)
-async def consultar_factura_afip(
-    consulta: FacturaConsultaSchema,
-    afip_client: AfipClient = Depends(get_afip_client)
-):
-    """
-    Consulta una factura directamente en AFIP
-    """
+async def consultar_factura_afip(consulta: FacturaConsultaSchema, afip_client: AfipClient = Depends(get_afip_client)):
     try:
         result = afip_client.check_invoice(
             consulta.punto_vta,
@@ -284,12 +252,7 @@ async def consultar_factura_afip(
 
 
 @router.get("/parametros/tipos-comprobante", response_model=List[ParametroAFIPSchema])
-async def obtener_tipos_comprobante(
-    afip_client: AfipClient = Depends(get_afip_client)
-):
-    """
-    Obtiene los tipos de comprobante disponibles desde AFIP
-    """
+async def obtener_tipos_comprobante(afip_client: AfipClient = Depends(get_afip_client)):
     try:
         tipos = afip_client.get_invoice_types()
         return [
@@ -311,12 +274,7 @@ async def obtener_tipos_comprobante(
 
 
 @router.get("/parametros/puntos-venta", response_model=List[ParametroAFIPSchema])
-async def obtener_puntos_venta(
-    afip_client: AfipClient = Depends(get_afip_client)
-):
-    """
-    Obtiene los puntos de venta habilitados desde AFIP
-    """
+async def obtener_puntos_venta(afip_client: AfipClient = Depends(get_afip_client)):
     try:
         puntos = afip_client.wsfe.get_sales_points()
         return [
@@ -340,12 +298,7 @@ async def obtener_puntos_venta(
 
 
 @router.get("/parametros/tipos-documento", response_model=List[ParametroAFIPSchema])
-async def obtener_tipos_documento(
-    afip_client: AfipClient = Depends(get_afip_client)
-):
-    """
-    Obtiene los tipos de documento disponibles desde AFIP
-    """
+async def obtener_tipos_documento(afip_client: AfipClient = Depends(get_afip_client)):
     try:
         tipos = afip_client.get_document_types()
         return [
@@ -367,12 +320,7 @@ async def obtener_tipos_documento(
 
 
 @router.get("/parametros/tipos-iva", response_model=List[ParametroAFIPSchema])
-async def obtener_tipos_iva(
-    afip_client: AfipClient = Depends(get_afip_client)
-):
-    """
-    Obtiene los tipos de IVA disponibles desde AFIP
-    """
+async def obtener_tipos_iva(afip_client: AfipClient = Depends(get_afip_client)):
     try:
         tipos = afip_client.get_vat_types()
         return [
@@ -397,12 +345,7 @@ async def obtener_tipos_iva(
 
 
 @router.get("/parametros/tipos-concepto", response_model=List[ParametroAFIPSchema])
-async def obtener_tipos_concepto(
-    afip_client: AfipClient = Depends(get_afip_client)
-):
-    """
-    Obtiene los tipos de concepto disponibles desde AFIP
-    """
+async def obtener_tipos_concepto(afip_client: AfipClient = Depends(get_afip_client)):
     try:
         tipos = afip_client.get_concept_types()
         return [
@@ -424,12 +367,7 @@ async def obtener_tipos_concepto(
 
 
 @router.get("/estado/servidores", response_model=dict)
-async def estado_servidores(
-    afip_client: AfipClient = Depends(get_afip_client)
-):
-    """
-    Verifica el estado de los servidores de AFIP
-    """
+async def estado_servidores(afip_client: AfipClient = Depends(get_afip_client)):
     try:
         estado = afip_client.wsfe.check_server_status()
         return {
@@ -450,13 +388,7 @@ async def estado_servidores(
         )
 
 @router.get("/parametros/cotizacion/{moneda_id}", response_model=dict)
-async def obtener_cotizacion(
-    moneda_id: str,
-    afip_client: AfipClient = Depends(get_afip_client)
-):
-    """
-    Obtiene la cotización oficial de una moneda (ej: DOL)
-    """
+async def obtener_cotizacion(moneda_id: str, afip_client: AfipClient = Depends(get_afip_client)):
     try:
         # Accedemos directamente al servicio WSFE del cliente
         client = afip_client.wsfe._get_client()
@@ -477,14 +409,7 @@ async def obtener_cotizacion(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/ultimo-comprobante/{punto_venta}/{tipo_cbte}", response_model=dict)
-async def obtener_ultimo_comprobante(
-    punto_venta: int,
-    tipo_cbte: int,
-    afip_client: AfipClient = Depends(get_afip_client)
-):
-    """
-    Consulta el último número autorizado en AFIP para verificar sincronización
-    """
+async def obtener_ultimo_comprobante(punto_venta: int, tipo_cbte: int, afip_client: AfipClient = Depends(get_afip_client)):
     try:
         ultimo = afip_client.get_last_invoice_number(punto_venta, tipo_cbte)
         return {
@@ -497,14 +422,8 @@ async def obtener_ultimo_comprobante(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/parametros/condiciones-iva-receptor", response_model=List[ParametroAFIPSchema])
-async def obtener_condiciones_iva_receptor(
-    afip_client: AfipClient = Depends(get_afip_client)
-):
-    """
-    Obtiene las condiciones de IVA del receptor (Nuevo ARCA)
-    """
+async def obtener_condiciones_iva_receptor(afip_client: AfipClient = Depends(get_afip_client)):
     try:
-        # Usamos el método nuevo que agregamos a wsfe.py
         condiciones = afip_client.wsfe.get_condicion_iva_receptor()
         
         return [
@@ -521,22 +440,15 @@ async def obtener_condiciones_iva_receptor(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{factura_id}/pdf")
-async def descargar_pdf(
-    factura_id: int,
-    db: Session = Depends(get_db)
-):
-    """
-    Genera y descarga el PDF de una factura
-    """
+async def descargar_pdf(factura_id: int, db: Session = Depends(get_db)):
     try:
         factura = db.query(Factura).filter(Factura.id == factura_id).first()
         if not factura:
             raise HTTPException(status_code=404, detail="Factura no encontrada")
 
-        # Configuración para el generador
         pdf_config = {
-            'pdf_output_dir': '/tmp', # Usar temporal en Render
-            'razon_social': Config.COMPANY_NAME, # Asegúrate de tener esto en Config
+            'pdf_output_dir': '/tmp',
+            'razon_social': Config.COMPANY_NAME,
             'cuit': Config.AFIP_CONFIG['cuit'],
             'domicilio': Config.COMPANY_ADDRESS
         }
@@ -544,7 +456,6 @@ async def descargar_pdf(
         # Generar PDF
         pdf_gen = FacturaPDF(pdf_config)
         
-        # Convertir modelo SQLAlchemy a diccionario para el generador
         factura_dict = {c.name: getattr(factura, c.name) for c in factura.__table__.columns}
         
         path = pdf_gen.generar_pdf(factura_dict)

@@ -1,6 +1,3 @@
-"""
-Configuración del sistema de logging
-"""
 import os
 import logging
 from pathlib import Path
@@ -9,15 +6,6 @@ from logging.handlers import RotatingFileHandler
 from src.config import Config
 
 def setup_logger(name):
-    """
-    Configura y devuelve un logger con nombre personalizado
-    
-    Args:
-        name (str): Nombre del logger
-        
-    Returns:
-        logging.Logger: Logger configurado
-    """
     # Crear directorio de logs si no existe
     log_dir = Path(Config.LOG_FILE).parent
     if not log_dir.exists():

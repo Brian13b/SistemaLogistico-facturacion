@@ -1,6 +1,3 @@
-"""
-Cliente principal de AFIP para todos los servicios
-"""
 from src.services.wsaa import WSAAService
 from src.services.wsfe import WSFEService
 from src.core.models import InvoiceRequest, InvoiceResponse
@@ -10,18 +7,8 @@ from src.config import Config
 logger = setup_logger(__name__)
 
 class AfipClient:
-    """Cliente principal para todos los servicios de AFIP"""
     
     def __init__(self, cuit=None, cert_path=None, key_path=None, testing=None):
-        """
-        Inicializa el cliente de AFIP
-        
-        Args:
-            cuit (str): CUIT del contribuyente
-            cert_path (str): Ruta al certificado
-            key_path (str): Ruta a la clave privada
-            testing (bool): Si es True, usa el entorno de homologación
-        """
         # Inicializar servicios
         self.wsaa = WSAAService(cuit, cert_path, key_path, testing)
         self.wsfe = WSFEService(cuit, cert_path, key_path, testing)
@@ -31,131 +18,58 @@ class AfipClient:
         self.testing = testing if testing is not None else self.wsaa.authenticator.testing
     
     def authenticate(self, service="wsfe", force_new=False):
-        """
-        Autentica con AFIP para un servicio específico
-        
-        Args:
-            service (str): Nombre del servicio (wsfe, padron, etc)
-            force_new (bool): Si es True, ignora la caché y genera un nuevo token
-            
-        Returns:
-            dict: Datos de autenticación
-        """
+        # Autenticar servicios
         return self.wsaa.get_auth_dict(service, force_new)
     
     def get_last_invoice_number(self, sales_point=None, voucher_type=1):
-        """
-        Obtiene el último número de factura
-        
-        Args:
-            sales_point (int): Punto de venta
-            voucher_type (int): Tipo de comprobante (1: Factura A, 6: Factura B, etc.)
-            
-        Returns:
-            int: Último número de factura
-        """
+        # Obtiene ultimo numero comprobante
         if sales_point is None:
             sales_point = Config.DEFAULT_SALES_POINT
             
         return self.wsfe.get_last_voucher(sales_point, voucher_type)
     
     def get_invoice_types(self):
-        """
-        Obtiene los tipos de comprobante disponibles
-        
-        Returns:
-            list: Lista de tipos de comprobante
-        """
+        # Tipos de comprobantes
         return self.wsfe.get_invoice_types()
     
     def get_vat_types(self):
-        """
-        Obtiene los tipos de IVA disponibles
-        
-        Returns:
-            list: Lista de tipos de IVA
-        """
+        # Tipos de IVA
         return self.wsfe.get_vat_types()
     
     def get_concept_types(self):
-        """
-        Obtiene los tipos de concepto disponibles
-        
-        Returns:
-            list: Lista de tipos de concepto
-        """
+        # Obtiene tipo de conceptos 
         return self.wsfe.get_concept_types()
     
     def get_document_types(self):
-        """
-        Obtiene los tipos de documento disponibles
-        
-        Returns:
-            list: Lista de tipos de documento
-        """
+        # Tipos de documentos
         return self.wsfe.get_document_types()
     
     def get_currency_types(self):
-        """
-        Obtiene los tipos de moneda disponibles
-        
-        Returns:
-            list: Lista de tipos de moneda
-        """
+        # Tipos de monedas
         return self.wsfe.get_currency_types()
     
     def create_invoice(self, invoice_data):
-        """
-        Crea una factura electrónica
-        
-        Args:
-            invoice_data (dict): Datos de la factura
-            
-        Returns:
-            InvoiceResponse: Respuesta de la factura autorizada
-        """
         # Convertir a modelo si es un diccionario
         if isinstance(invoice_data, dict):
             invoice_request = InvoiceRequest(**invoice_data)
         else:
             invoice_request = invoice_data
-            
+        
+        # Crear factura
         return self.wsfe.create_invoice(invoice_request)
     
     def check_invoice(self, sales_point, voucher_type, voucher_number):
-        """
-        Consulta una factura existente
-        
-        Args:
-            sales_point (int): Punto de venta
-            voucher_type (int): Tipo de comprobante
-            voucher_number (int): Número de comprobante
-            
-        Returns:
-            dict: Datos de la factura
-        """
+        # Consultar factura
         return self.wsfe.check_invoice(sales_point, voucher_type, voucher_number)
     
     def create_invoice_a(self, client_cuit, net_amount, vat_rate=21, **kwargs):
-        """
-        Crea una factura tipo A
-        
-        Args:
-            client_cuit (str): CUIT del cliente
-            net_amount (float): Importe neto
-            vat_rate (float): Tasa de IVA (21, 10.5, etc.)
-            **kwargs: Argumentos adicionales para la factura
-            
-        Returns:
-            InvoiceResponse: Respuesta de la factura autorizada
-        """
         # Mapeo de tasas de IVA a sus IDs correspondientes en AFIP
         VAT_RATE_TO_ID = {
             21: 5,
             10.5: 4,
             27: 6,
-            # Agrega otras tasas si es necesario
         }
+
         # Calcular importes
         vat_amount = net_amount * (vat_rate / 100)
         total_amount = net_amount + vat_amount
@@ -191,26 +105,13 @@ class AfipClient:
         return self.create_invoice(invoice_data)
     
     def create_invoice_b(self, client_doc_type, client_doc_number, total_amount, vat_rate=21, **kwargs):
-        """
-        Crea una factura tipo B
-        
-        Args:
-            client_doc_type (int): Tipo de documento del cliente
-            client_doc_number (str): Número de documento del cliente
-            total_amount (float): Importe total (con IVA incluido)
-            vat_rate (float): Tasa de IVA (21, 10.5, etc.)
-            **kwargs: Argumentos adicionales para la factura
-            
-        Returns:
-            InvoiceResponse: Respuesta de la factura autorizada
-        """
         # Mapeo de tasas de IVA a sus IDs correspondientes en AFIP
         VAT_RATE_TO_ID = {
             21: 5,
             10.5: 4,
             27: 6,
-            # Agrega otras tasas si es necesario
         }
+        
         # Calcular importes
         net_amount = total_amount / (1 + (vat_rate / 100))
         vat_amount = total_amount - net_amount

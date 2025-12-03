@@ -1,9 +1,8 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Numeric
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Numeric, Float
 from datetime import datetime
 from src.database.database import Base
 
 class Factura(Base):
-    """Modelo de factura emitida compatible con ARCA v4.1"""
     __tablename__ = "facturas"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -18,10 +17,13 @@ class Factura(Base):
     # Datos del cliente
     tipo_doc = Column(Integer, nullable=False)
     nro_doc = Column(String(20), nullable=False, index=True)
-    # Nuevo campo v4.0/4.1 [cite: 41]
     condicion_iva_receptor_id = Column(Integer, nullable=True) 
     
-    # Importes (Usando Numeric para precisión financiera)
+    # Importes
+    cantidad = Column(Float, default=1.0)
+    unidad_medida = Column(String(50), default="Unidad")
+    precio_unitario = Column(Float, default=0.0)
+    alicuota_iva = Column(Float, default=21.0)
     imp_total = Column(Numeric(15, 2), nullable=False)
     imp_neto = Column(Numeric(15, 2), nullable=False)
     imp_iva = Column(Numeric(15, 2), default=0)
@@ -50,7 +52,6 @@ class Factura(Base):
     detalles_tributos = Column(Text, nullable=True)
     moneda = Column(String(3), default="PES")
     moneda_cotiz = Column(Numeric(10, 6), default=1.0)
-    # Nuevo campo v4.0 [cite: 41]
     can_mis_mon_ext = Column(String(1), default="N") 
     
     pdf_generado = Column(Boolean, default=False)

@@ -16,7 +16,6 @@ class TributeDetailSchema(BaseModel):
     importe: Decimal = Field(..., description="Importe")
 
 class FacturaRequestSchema(BaseModel):
-    """Schema actualizado para RG 4291 v4.1"""
     viaje_id: Optional[int] = None
     sales_point: int = Field(..., ge=1)
     voucher_type: int = Field(..., description="1: Factura A, 6: Factura B, 11: Factura C")
@@ -24,15 +23,15 @@ class FacturaRequestSchema(BaseModel):
     doc_type: int = Field(80)
     doc_number: str = Field(..., min_length=7, max_length=20)
     
-    # Nuevos campos ARCA v4.0/4.1 [cite: 41]
-    condicion_iva_receptor_id: Optional[int] = Field(
-        None, 
-        description="Obligatorio por RG 5616. Consultar FEParamGetCondicionIvaReceptor"
-    )
+    condicion_iva_receptor_id: Optional[int] = Field(None, description="Obligatorio por RG 5616. Consultar FEParamGetCondicionIvaReceptor")
     can_mis_mon_ext: str = Field("N", pattern="^(S|N)$", description="Cancelación Misma Moneda Extranjera")
     description: Optional[str] = Field(None, description="Descripción del ítem o servicio")
 
-    # Importes como Decimal
+    # Importes
+    cantidad: float = Field(1.0, description="Cantidad de ítems")
+    unidad_medida: str = Field("Unidad", description="Unidad de medida (tn, kg, lts, etc)")
+    precio_unitario: float = Field(..., description="Precio unitario neto")
+    alicuota_iva: float = Field(21.0, description="Porcentaje de IVA aplicado")
     total_amount: Decimal = Field(..., gt=0)
     net_amount: Decimal = Field(..., ge=0)
     vat_amount: Decimal = Field(0, ge=0)
@@ -58,9 +57,7 @@ class FacturaRequestSchema(BaseModel):
 
     @model_validator(mode='after')
     def validate_total_consistency(self) -> 'FacturaRequestSchema':
-        """Valida que el importe total sea la suma exacta de sus componentes."""
         
-        # Aseguramos que los valores sean Decimal
         net = self.net_amount or Decimal(0)
         vat = self.vat_amount or Decimal(0)
         non_tax = self.non_taxable_amount or Decimal(0)
@@ -69,8 +66,6 @@ class FacturaRequestSchema(BaseModel):
         
         expected_total = net + vat + non_tax + exempt + tributes
         
-        # Usamos abs() para permitir una diferencia mínima por redondeo de la DB, 
-        # aunque con Decimal no debería pasar.
         if abs(self.total_amount - expected_total) > Decimal('0.01'):
             raise ValueError(
                 f"Total ({self.total_amount}) no coincide con la suma de componentes ({expected_total}). "
@@ -92,7 +87,6 @@ class FacturaResponseSchema(BaseModel):
         from_attributes = True
 
 class FacturaListSchema(BaseModel):
-    """Schema simplificado para listar facturas"""
     id: int
     tipo_cbte: int
     punto_vta: int
@@ -108,14 +102,12 @@ class FacturaListSchema(BaseModel):
         from_attributes = True
 
 class ParametroAFIPSchema(BaseModel):
-    """Schema para parámetros de AFIP (Monedas, Tipos de Comprobante, etc.)"""
     tipo: str
     codigo: str
     descripcion: Optional[str]
     datos_adicionales: Optional[Dict[str, Any]] = None
 
 class FacturaConsultaSchema(BaseModel):
-    """Schema para consultar una factura específica en AFIP"""
     tipo_cbte: int = Field(..., description="Tipo de comprobante (1: A, 6: B, etc)")
     punto_vta: int = Field(..., description="Punto de venta")
     numero: int = Field(..., description="Número de comprobante")

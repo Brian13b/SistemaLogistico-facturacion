@@ -14,11 +14,6 @@ logger = setup_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Gestión del ciclo de vida de la aplicación
-    - Crea las tablas de la base de datos al iniciar
-    """
-    # Crear tablas
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("Tablas de base de datos creadas/verificadas")
@@ -27,7 +22,6 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # Cleanup si es necesario
     logger.info("Cerrando aplicación")
 
 
@@ -38,16 +32,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configurar CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción, especificar los orígenes permitidos
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Incluir rutas
 app.include_router(facturas_router)
 
 
@@ -88,6 +80,6 @@ if __name__ == "__main__":
     uvicorn.run(
         "src.api_main:app",
         host="0.0.0.0",
-        port=8001,  # Puerto diferente al backend principal
+        port=8001,
         reload=True
     )

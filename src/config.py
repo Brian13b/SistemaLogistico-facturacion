@@ -23,7 +23,7 @@ class Config:
         "testing": os.getenv("AFIP_TESTING", "True").lower() in ("true", "1", "t"),
     }
 
-    # URLs de los servicios AFIP
+    # URLs de los servicios
     AFIP_URLS = {
         "wsaa": {
             "testing": "https://wsaahomo.afip.gov.ar/ws/services/LoginCms",

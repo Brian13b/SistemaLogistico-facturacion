@@ -8,7 +8,6 @@ from src.utils.logger import setup_logger
 logger = setup_logger(__name__)
 
 def read_cert_and_key(cert_path, key_path):
-    """Lee certificado y clave desde disco"""
     if not os.path.exists(cert_path):
         raise FileNotFoundError(f"Certificado no encontrado: {cert_path}")
     if not os.path.exists(key_path):
@@ -22,10 +21,6 @@ def read_cert_and_key(cert_path, key_path):
     return cert_data, key_data
 
 def sign_data(data, cert_content, key_content, detached):
-    """
-    Firma datos (TRA) usando PKCS#7 Detached signature
-    Compatible con WSAA de AFIP
-    """
     try:
         # Cargar certificado
         cert = x509.load_pem_x509_certificate(cert_content)
@@ -40,17 +35,15 @@ def sign_data(data, cert_content, key_content, detached):
         options = [pkcs7.PKCS7Options.DetachedSignature] if detached else []
         
         # Construir firma
-        builder = pkcs7.PKCS7SignatureBuilder()\
-            .set_data(data.encode('utf-8') if isinstance(data, str) else data)\
-            .add_signer(cert, key, hashes.SHA256()) # AFIP soporta SHA256
+        builder = pkcs7.PKCS7SignatureBuilder().set_data(data.encode('utf-8') if isinstance(data, str) else data).add_signer(cert, key, hashes.SHA256())
             
-        # Generar PKCS7 (DER)
+        # Generar PKCS7
         signed_data = builder.sign(
             encoding=serialization.Encoding.DER,
             options=options
         )
         
-        # Retornar en Base64 como pide AFIP
+        # Retornar en Base64
         return b64encode(signed_data).decode('utf-8')
         
     except Exception as e:

@@ -1,7 +1,3 @@
-"""
-Servicio de Factura Electrónica de AFIP (WSFE) - Versión Final
-Cumple con especificación RG 4291 y ARCA v4.1
-"""
 from datetime import datetime
 from decimal import Decimal
 from requests import Session
@@ -15,13 +11,11 @@ from src.core.models import InvoiceRequest, InvoiceResponse
 from src.utils.logger import setup_logger
 from src.utils.xml_utils import format_wsfe_error
 
-# Suprimir advertencias de certificados SSL no verificados (solo para desarrollo)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = setup_logger(__name__)
 
 class WSFEService:
-    """Clase para interactuar con el servicio WSFE de AFIP"""
     class ParametroMock:
         def __init__(self, id_, desc):
             self.Id = id_
@@ -39,15 +33,14 @@ class WSFEService:
         self.testing = testing if testing is not None else self.wsaa_service.authenticator.testing
         self.cuit = cuit or self.wsaa_service.authenticator.cuit
         
-        # URL del servicio WSFE según el entorno
         self.wsfe_url = Config.AFIP_URLS["wsfe"]["testing"] if self.testing else Config.AFIP_URLS["wsfe"]["production"]
         
         if self.testing:
-            logger.warning("⚠️  MODO HOMOLOGACIÓN ACTIVO - No se emitirán facturas reales")
+            logger.warning("---MODO HOMOLOGACIÓN ACTIVO - No se emitirán facturas reales---")
     
     def _get_client(self):
         session = Session()
-        session.verify = False  # Solo para desarrollo
+        session.verify = False 
         transport = Transport(session=session)
         return Client(wsdl=f"{self.wsfe_url}?WSDL", transport=transport)
     
@@ -64,7 +57,7 @@ class WSFEService:
                 'auth_server': result.AuthServer
             }
         except Exception as e:
-            logger.error(f"Error al verificar estado del servidor: {str(e)}")
+            logger.error(f"Error al verificar estado del servidor")
             raise
     
     def get_last_voucher(self, sales_point, voucher_type):
@@ -92,14 +85,11 @@ class WSFEService:
             raise
             
     def get_invoice_types(self):
-        """
-        Obtiene tipos de comprobante (Con fallback para Testing)
-        """
         try:
             return self._get_param_data('FEParamGetTiposCbte', 'CbteTipo')
         except Exception as e:
             if self.testing:
-                logger.warning(f"Fallo AFIP (Tipos Cbte). Usando datos locales de respaldo. Error: {e}")
+                logger.warning(f"Fallo ARCA (Tipos Comprobantes). Error: {e}")
                 return [
                     self.ParametroMock(1, "Factura A"),
                     self.ParametroMock(2, "Nota de Débito A"),
@@ -114,14 +104,11 @@ class WSFEService:
             raise e
 
     def get_concept_types(self):
-        """
-        Obtiene tipos de concepto (Con fallback para Testing)
-        """
         try:
             return self._get_param_data('FEParamGetTiposConcepto', 'ConceptoTipo')
         except Exception as e:
             if self.testing:
-                logger.warning(f"Fallo AFIP (Conceptos). Usando datos locales de respaldo. Error: {e}")
+                logger.warning(f"Fallo AFIP (Conceptos). Error: {e}")
                 return [
                     self.ParametroMock(1, "Productos"),
                     self.ParametroMock(2, "Servicios"),
@@ -130,14 +117,11 @@ class WSFEService:
             raise e
 
     def get_document_types(self):
-        """
-        Obtiene tipos de documento (Con fallback para Testing)
-        """
         try:
             return self._get_param_data('FEParamGetTiposDoc', 'DocTipo')
         except Exception as e:
             if self.testing:
-                logger.warning(f"Fallo AFIP (Tipos Doc). Usando datos locales de respaldo. Error: {e}")
+                logger.warning(f"Fallo AFIP (Tipos Documentos). Error: {e}")
                 return [
                     self.ParametroMock(80, "CUIT"),
                     self.ParametroMock(86, "CUIL"),
@@ -163,7 +147,6 @@ class WSFEService:
             if hasattr(result, 'Errors') and result.Errors:
                 error_msg = format_wsfe_error(result.Errors)
                 
-                # Si estamos en testing y AFIP dice "Sin Resultados", devolvemos uno por defecto
                 if self.testing and "602" in str(error_msg):
                     logger.warning("AFIP devolvió 602 (Sin Puntos de Venta). Usando PV 1 por defecto para Testing.")
                     
@@ -186,7 +169,6 @@ class WSFEService:
             raise
         
     def _get_param_data(self, method_name, result_key):
-        """Método genérico para obtener parámetros"""
         try:
             client = self._get_client()
             auth = self._get_auth()
@@ -203,9 +185,6 @@ class WSFEService:
             raise
 
     def create_invoice(self, invoice_request):
-        """
-        Crea una factura electrónica adaptada a ARCA v4.1
-        """
         try:
             client = self._get_client()
             auth = self._get_auth()
@@ -230,12 +209,9 @@ class WSFEService:
                 'ImpTrib': float(invoice_request.tributes_amount),
                 'MonId': invoice_request.currency,
                 'MonCotiz': float(invoice_request.currency_rate),
-                
-                # Nuevos campos ARCA v4.0/4.1
                 'CanMisMonExt': invoice_request.can_mis_mon_ext
             }
 
-            # Campo CondicionIVAReceptorId
             if invoice_request.condicion_iva_receptor_id:
                 detalle['CondicionIVAReceptorId'] = invoice_request.condicion_iva_receptor_id
 
@@ -245,7 +221,7 @@ class WSFEService:
                 detalle['FchServHasta'] = invoice_request.service_end_date or current_date
                 detalle['FchVtoPago'] = invoice_request.payment_due_date or current_date
 
-            # Arrays de IVA
+            # IVA
             if invoice_request.vat_details:
                 detalle['Iva'] = {
                     'AlicIva': [
@@ -257,7 +233,7 @@ class WSFEService:
                     ]
                 }
             
-            # Arrays de Tributos
+            # Tributos
             if invoice_request.tributes_details:
                 detalle['Tributos'] = {
                     'Tributo': [
@@ -286,7 +262,6 @@ class WSFEService:
                 }
             }
             
-            logger.info(f"Solicitando CAE para comprobante {invoice_request.voucher_type}, PV {invoice_request.sales_point}")
             result = client.service.FECAESolicitar(**invoice_data_soap)
             
             # Verificar errores generales
@@ -321,8 +296,7 @@ class WSFEService:
                 errors=None
             )
             
-            logger.info(f"✅ Factura creada con CAE: {invoice_response.cae}")
-            # CORRECCIÓN: Devolvemos el objeto directamente
+            logger.info(f"Factura creada con CAE: {invoice_response.cae}")
             return invoice_response
             
         except Exception as e:
@@ -355,9 +329,6 @@ class WSFEService:
             raise
 
     def get_condicion_iva_receptor(self):
-        """
-        Nuevo método v4.0: Recuperar condiciones de IVA receptor
-        """
         try:
             client = self._get_client()
             auth = self._get_auth()
