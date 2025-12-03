@@ -364,3 +364,16 @@ class FacturaPDF:
         except Exception as e:
             logger.error(f"Error generando QR: {e}")
             return Spacer(1,1)
+        
+    def _get_logo(self):
+        if not self.empresa['logo_path'] or not os.path.exists(self.empresa['logo_path']):
+            return None
+            
+        try:
+            logo = Image(self.empresa['logo_path'])
+            logo.drawHeight = 2*cm
+            logo.drawWidth = 4*cm
+            return logo
+        except Exception as e:
+            logger.error(f"Error al cargar logo: {e}")
+            return None

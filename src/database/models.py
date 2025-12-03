@@ -65,4 +65,3 @@ class ParametroAFIP(Base):
     descripcion = Column(String(255), nullable=True)
     datos_adicionales = Column(Text, nullable=True)
     fecha_actualizacion = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-
