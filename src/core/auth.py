@@ -112,7 +112,7 @@ class AfipAuthenticator:
             # Crear cliente SOAP para WSAA
             session = Session()
             session.verify = False
-            transport = Transport(session=session, timeout=30) # 30 segundos para evitar errores en redes lentas
+            transport = Transport(session=session, timeout=30) 
             client = Client(wsdl=f"{self.wsaa_url}?WSDL", transport=transport)
             
             # Enviar TRA y obtener respuesta
