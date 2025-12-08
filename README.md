@@ -1,10 +1,6 @@
 # 💰 Módulo de facturación electrónica del sistema de gestión de flotas.
 
-<<<<<<< HEAD
-Este repositorio forma parte del Sistema Logistico y se encarga de la gestión de la facturación electrónica. Está integrado con el **web service SOAP** de **AFIP / ARCA Argentina** para emitir comprobantes fiscales válidos, automatizando parte del proceso tributario.
-=======
 Este repositorio forma parte del **Sistema Logistico** y se encarga de la gestión de la facturación electrónica. Está integrado con el **web service SOAP** de **AFIP / ARCA Argentina** para emitir comprobantes fiscales válidos, automatizando parte del proceso tributario.
->>>>>>> 4bf0f4dee04c90fe04d09742479d41c52865b65d
 
 ---
 
@@ -30,7 +26,7 @@ Este repositorio forma parte del **Sistema Logistico** y se encarga de la gesti�
 2. 🔄 Se conecta al web service SOAP de AFIP a través de ARCA para emitir el comprobante.  
 3. 🧾 Recibe el CAE y demás datos fiscales.  
 4. 💾 Guarda la factura en la base de datos y la expone para consulta o descarga.  
-5. 🖨️ Permite la exportación o visualización de la factura en formato PDF.
+5. 🖨️ Permite la exportación de la factura en formato PDF.
 
 ---
 
@@ -40,14 +36,14 @@ Este repositorio forma parte del **Sistema Logistico** y se encarga de la gesti�
 3. 🔄 Conexión al web service SOAP de AFIP para emitir la factura.  
 4. ✅ Recepción del CAE (Código de Autorización Electrónica).  
 5. 💾 Registro de la factura en la base de datos.  
-6. 📤 Exposición de la factura al frontend para visualización o descarga.
+6. 📤 Exposición de la factura al frontend para descarga.
 
 ---
 
 🛡️ **Tecnologías Usadas**  
 - 🖥️ Lenguaje: Python  
 - ⚡ Framework: FastAPI 
-- 🔗 Integración SOAP: Zeep / Suds / librería equivalente  
+- 🔗 Integración SOAP: Zeep  
 - 💼 Servicio fiscal: AFIP / ARCA Argentina (SOAP)  
 - 🗄️ Base de datos: PostgreSQL
 

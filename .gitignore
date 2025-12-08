@@ -1,4 +1,4 @@
-# Certificados y claves privadas - NUNCA subir al repositorio
+# Certificados y claves privadas 
 *.p12
 *.pfx
 *.crt
@@ -9,6 +9,8 @@ certs/*.csr
 certs/*.key
 certs/*.p12
 certs/*.pfx
+certs/
+
 
 # Variables de entorno
 .env
