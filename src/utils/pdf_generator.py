@@ -175,7 +175,6 @@ class FacturaPDF:
         
         tabla_header.setStyle(TableStyle([
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('LINEAFTER', (0,0), (0,0), 0.5, colors.black),
             ('ALIGN', (1,0), (1,0), 'CENTER'),
             ('LEFTPADDING', (2,0), (2,0), 10),
         ]))
