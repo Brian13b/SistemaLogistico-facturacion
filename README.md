@@ -1,57 +1,45 @@
-# 💰 Módulo de facturación electrónica del sistema de gestión de flotas.
+# 💰 Microservicio de Facturación Electrónica
 
-Este repositorio forma parte del **Sistema Logistico** y se encarga de la gestión de la facturación electrónica. Está integrado con el **web service SOAP** de **AFIP / ARCA Argentina** para emitir comprobantes fiscales válidos, automatizando parte del proceso tributario.
-
----
-
-🌟 **¿Qué hace este módulo?**  
-- Permite generar facturas electrónicas válidas ante AFIP, utilizando el servicio ARCA.  
-- Gestiona la conexión al servicio SOAP para autorizar y validar comprobantes.  
-- Proporciona una API REST para que el frontend pueda crear, consultar y descargar facturas.  
-- Administra los datos de facturación relacionados con viajes y servicios.
+Módulo especializado del **Sistema Logístico** encargado de la comunicación fiscal. Interactúa directamente con los Web Services SOAP de **AFIP / ARCA Argentina** para la autorización de comprobantes electrónicos (CAE).
 
 ---
 
-🔧 **Características principales**  
-- 📄 Emisión de facturas electrónicas tipo A, B y otros comprobantes autorizados.  
-- 🔐 Validación automática de CUIT, condición fiscal y puntos de venta.  
-- 📤 Conexión directa al web service **SOAP** de **AFIP/ARCA Argentina**.  
-- 🌐 API REST para consulta y gestión desde el frontend.  
-- 🗃️ Registro de facturas emitidas con historial y estado (CAE, vencimiento, etc.).
+## 🌟 Funcionalidades Principales
+- **Emisión de Comprobantes:** Facturas A, B, Notas de Crédito y Débito.
+- **Conector SOAP:** Abstracción completa del protocolo SOAP usando `Zeep`.
+- **Validaciones Fiscales:** Verificación de CUITs, puntos de venta y condición tributaria.
+- **Persistencia:** Historial local de comprobantes emitidos y sus CAEs.
+- **Generación de PDF:** Exportación visual del comprobante.
 
 ---
 
-📚 **Flujo de trabajo**  
-1. 📦 Se genera una orden de facturación vinculada a un viaje.  
-2. 🔄 Se conecta al web service SOAP de AFIP a través de ARCA para emitir el comprobante.  
-3. 🧾 Recibe el CAE y demás datos fiscales.  
-4. 💾 Guarda la factura en la base de datos y la expone para consulta o descarga.  
-5. 🖨️ Permite la exportación de la factura en formato PDF.
+## 🔧 Proceso Técnico (Flujo de Emisión)
+1.  📥 **Input:** Recibe una orden de facturación (JSON) desde el Backend/Frontend.
+2.  🔄 **Conversión:** Transforma los datos al formato XML requerido por WSFEv1.
+3.  🔐 **Autenticación AFIP:**
+    - Gestiona el Ticket de Acceso (WSAA) con Certificado y Clave Privada.
+    - *Smart Caching:* Reutiliza el token si aún es válido para no saturar el servicio de AFIP.
+4.  📡 **Solicitud CAE:** Envía la solicitud al WS de Facturación (WSFEv1).
+5.  ✅ **Respuesta:** Recibe el CAE y fecha de vencimiento, guardándolos en PostgreSQL.
+6.  🖨️ **Descarga:** Permite la descarga de la factura en formato PDF.
 
 ---
 
-📚 **Proceso técnico**  
-1. 📝 Usuario completa un formulario desde el frontend.  
-2. 📡 Solicitud enviada al backend vía API.  
-3. 🔄 Conexión al web service SOAP de AFIP para emitir la factura.  
-4. ✅ Recepción del CAE (Código de Autorización Electrónica).  
-5. 💾 Registro de la factura en la base de datos.  
-6. 📤 Exposición de la factura al frontend para descarga.
+## 🛡️ Stack Tecnológico
+- **Framework:** FastAPI (Python)
+- **Protocolo Fiscal:** SOAP (Cliente Zeep)
+- **Base de Datos:** PostgreSQL
+- **Integración:** AFIP / ARCA (Entornos Homologación y Producción)
 
 ---
 
-🛡️ **Tecnologías Usadas**  
-- 🖥️ Lenguaje: Python  
-- ⚡ Framework: FastAPI 
-- 🔗 Integración SOAP: Zeep  
-- 💼 Servicio fiscal: AFIP / ARCA Argentina (SOAP)  
-- 🗄️ Base de datos: PostgreSQL
+## 🌱 Futuras Actualizaciones
+- [ ] **Envío por Email:** Envío automático de la factura PDF al cliente.
+- [ ] **Cola de Tareas:** Implementar Celery/RabbitMQ para facturación masiva asíncrona.
+- [ ] **Reportes Contables:** Exportación de Libros de IVA (Ventas/Compras).
+- [ ] **Manejo de Errores Avanzado:** Retry automático ante caídas del servidor de AFIP.
 
 ---
 
-🌱 **Futuras actualizaciones**  
-- 📈 Reportes fiscales automáticos por mes/año.  
-- ✉️ Envío de facturas por correo electrónico.  
-- 💳 Integración con pasarelas de pago para facturación inmediata.
-
----
+## 👤 Autor
+**Brian Battauz** - [GitHub](https://github.com/Brian13b)
